@@ -15,6 +15,22 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   shortcutName: 纸间
+mac:
+  category: public.app-category.productivity
+  artifactName: zhijian-${version}-mac.${ext}
+  target:
+    - target: dmg
+      arch:
+        - universal
+    - target: zip
+      arch:
+        - universal
+linux:
+  category: Office
+  executableName: zhijian
+  artifactName: zhijian-${version}.${ext}
+  target:
+    - AppImage
 publish:
   provider: github
   owner: xxqwq

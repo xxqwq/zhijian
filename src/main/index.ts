@@ -84,24 +84,42 @@ async function readTree(dir: string): Promise<FileNode[]> {
 }
 
 function buildMenu(): Menu {
-  return Menu.buildFromTemplate([
-    {
-      label: '文件',
+  const isMac = process.platform === 'darwin'
+  const template: Electron.MenuItemConstructorOptions[] = []
+
+  if (isMac) {
+    template.push({
+      label: app.name,
       submenu: [
-        menuItem('打开文件夹…', 'open-folder', 'CmdOrCtrl+O'),
-        menuItem('打开文件…', 'open-file', 'CmdOrCtrl+Shift+O'),
-        menuItem('新建文件', 'new-file', 'CmdOrCtrl+N'),
-        menuItem('关闭标签', 'close-tab', 'CmdOrCtrl+W'),
+        { role: 'about', label: '关于纸间' },
         { type: 'separator' },
-        menuItem('保存', 'save', 'CmdOrCtrl+S'),
-        menuItem('另存为…', 'save-as', 'CmdOrCtrl+Shift+S'),
+        { role: 'hide', label: '隐藏纸间' },
+        { role: 'hideOthers', label: '隐藏其他' },
+        { role: 'unhide', label: '显示全部' },
         { type: 'separator' },
-        menuItem('导出 HTML…', 'export-html'),
-        menuItem('导出 PDF…', 'export-pdf'),
-        { type: 'separator' },
-        { role: 'quit', label: '退出' }
+        { role: 'quit', label: '退出纸间' }
       ]
-    },
+    })
+  }
+
+  const fileSubmenu: Electron.MenuItemConstructorOptions[] = [
+    menuItem('打开文件夹…', 'open-folder', 'CmdOrCtrl+O'),
+    menuItem('打开文件…', 'open-file', 'CmdOrCtrl+Shift+O'),
+    menuItem('新建文件', 'new-file', 'CmdOrCtrl+N'),
+    menuItem('关闭标签', 'close-tab', 'CmdOrCtrl+W'),
+    { type: 'separator' },
+    menuItem('保存', 'save', 'CmdOrCtrl+S'),
+    menuItem('另存为…', 'save-as', 'CmdOrCtrl+Shift+S'),
+    { type: 'separator' },
+    menuItem('导出 HTML…', 'export-html'),
+    menuItem('导出 PDF…', 'export-pdf')
+  ]
+  if (!isMac) {
+    fileSubmenu.push({ type: 'separator' }, { role: 'quit', label: '退出' })
+  }
+
+  template.push(
+    { label: '文件', submenu: fileSubmenu },
     {
       label: '编辑',
       submenu: [
@@ -173,32 +191,48 @@ function buildMenu(): Menu {
         { role: 'toggleDevTools', label: '开发者工具' },
         { role: 'reload', label: '重新加载' }
       ]
-    },
-    {
-      label: '帮助',
-      submenu: [
-        {
-          label: '检查更新',
-          click: () => checkForAppUpdates(true)
-        },
-        {
-          label: '国内下载安装包',
-          click: () => openChinaInstallerDownload()
-        },
-        { type: 'separator' },
-        {
-          label: '关于纸间',
-          click: () => {
-            void dialog.showMessageBox({
-              type: 'info',
-              message: '纸间',
-              detail: `版本 ${app.getVersion()}\nhttps://github.com/xxqwq/zhijian`
-            })
-          }
-        }
-      ]
     }
-  ])
+  )
+
+  if (isMac) {
+    template.push({
+      label: '窗口',
+      role: 'window',
+      submenu: [
+        { role: 'minimize', label: '最小化' },
+        { role: 'zoom', label: '缩放' },
+        { type: 'separator' },
+        { role: 'front', label: '全部置于顶层' }
+      ]
+    })
+  }
+
+  template.push({
+    label: '帮助',
+    submenu: [
+      {
+        label: '检查更新',
+        click: () => checkForAppUpdates(true)
+      },
+      {
+        label: '国内下载安装包',
+        click: () => openChinaInstallerDownload()
+      },
+      { type: 'separator' },
+      {
+        label: '关于纸间',
+        click: () => {
+          void dialog.showMessageBox({
+            type: 'info',
+            message: '纸间',
+            detail: `版本 ${app.getVersion()}\nhttps://github.com/xxqwq/zhijian`
+          })
+        }
+      }
+    ]
+  })
+
+  return Menu.buildFromTemplate(template)
 }
 
 async function createWindow(): Promise<void> {
