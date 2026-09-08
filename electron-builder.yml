@@ -15,3 +15,7 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   shortcutName: 纸间
+publish:
+  provider: github
+  owner: xxqwq
+  repo: zhijian

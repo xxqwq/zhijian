@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, protocol, net, shell } from 'electron'
+import { checkForAppUpdates, setupUpdater } from './updater'
 import { existsSync } from 'fs'
 import { mkdir, readdir, readFile, writeFile, rename } from 'fs/promises'
 import path from 'path'
@@ -171,6 +172,26 @@ function buildMenu(): Menu {
         { type: 'separator' },
         { role: 'toggleDevTools', label: '开发者工具' },
         { role: 'reload', label: '重新加载' }
+      ]
+    },
+    {
+      label: '帮助',
+      submenu: [
+        {
+          label: '检查更新',
+          click: () => checkForAppUpdates(true)
+        },
+        { type: 'separator' },
+        {
+          label: '关于纸间',
+          click: () => {
+            void dialog.showMessageBox({
+              type: 'info',
+              message: '纸间',
+              detail: `版本 ${app.getVersion()}\nhttps://github.com/xxqwq/zhijian`
+            })
+          }
+        }
       ]
     }
   ])
@@ -523,6 +544,7 @@ app.whenReady().then(async () => {
 
   registerIpc()
   await createWindow()
+  setupUpdater(() => mainWindow)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow()
