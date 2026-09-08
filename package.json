@@ -1,6 +1,6 @@
 {
   "name": "zhijian",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "纸间 — 类 Typora Markdown 桌面编辑器",
   "main": "./out/main/index.js",
   "author": "纸间",

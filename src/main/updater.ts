@@ -1,14 +1,35 @@
-import { app, dialog, type BrowserWindow } from 'electron'
+import { app, dialog, shell, type BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 
 type WindowGetter = () => BrowserWindow | null
 
 let getWindow: WindowGetter = () => null
 let manualCheck = false
+let suppressError = false
+
+/** GitHub 安装包经国内加速站转发，避免直连 release-assets.githubusercontent.com */
+export const UPDATE_FEEDS = [
+  'https://gh-proxy.com/https://github.com/xxqwq/zhijian/releases/latest/download',
+  'https://ghproxy.net/https://github.com/xxqwq/zhijian/releases/latest/download',
+  'https://ghfast.top/https://github.com/xxqwq/zhijian/releases/latest/download'
+]
 
 function box(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
   const win = getWindow()
   return win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options)
+}
+
+function applyFeed(url: string): void {
+  autoUpdater.setFeedURL({
+    provider: 'generic',
+    url,
+    useMultipleRangeRequest: false
+  })
+}
+
+export function openChinaInstallerDownload(): void {
+  const url = `${UPDATE_FEEDS[0]}/zhijian-setup-${app.getVersion()}.exe`
+  void shell.openExternal(url)
 }
 
 export function checkForAppUpdates(fromMenu: boolean): void {
@@ -17,24 +38,40 @@ export function checkForAppUpdates(fromMenu: boolean): void {
       void box({
         type: 'info',
         message: '开发模式不会检查更新',
-        detail: '安装打包后的纸间，才会向 GitHub 查询新版本。'
+        detail: '安装打包后的纸间，才会查询新版本。'
       })
     }
     return
   }
 
+  void runUpdateCheck(fromMenu)
+}
+
+async function runUpdateCheck(fromMenu: boolean): Promise<void> {
   manualCheck = fromMenu
-  void autoUpdater.checkForUpdates().catch((error: unknown) => {
-    const detail = error instanceof Error ? error.message : String(error)
-    if (manualCheck) {
-      void box({
-        type: 'error',
-        message: '检查更新失败',
-        detail
-      })
+  suppressError = true
+  let lastError: Error | null = null
+
+  for (const url of UPDATE_FEEDS) {
+    try {
+      applyFeed(url)
+      await autoUpdater.checkForUpdates()
+      suppressError = false
+      return
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
     }
-    manualCheck = false
-  })
+  }
+
+  suppressError = false
+  if (fromMenu) {
+    void box({
+      type: 'error',
+      message: '检查更新失败',
+      detail: lastError?.message ?? '无法连接到更新服务器'
+    })
+  }
+  manualCheck = false
 }
 
 export function setupUpdater(getter: WindowGetter): void {
@@ -43,6 +80,7 @@ export function setupUpdater(getter: WindowGetter): void {
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
+  applyFeed(UPDATE_FEEDS[0])
 
   autoUpdater.on('update-available', (info) => {
     if (manualCheck) {
@@ -66,6 +104,7 @@ export function setupUpdater(getter: WindowGetter): void {
   })
 
   autoUpdater.on('error', (error) => {
+    if (suppressError) return
     if (manualCheck) {
       void box({
         type: 'error',

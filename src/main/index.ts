@@ -1,5 +1,5 @@
 import { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, protocol, net, shell } from 'electron'
-import { checkForAppUpdates, setupUpdater } from './updater'
+import { checkForAppUpdates, openChinaInstallerDownload, setupUpdater } from './updater'
 import { existsSync } from 'fs'
 import { mkdir, readdir, readFile, writeFile, rename } from 'fs/promises'
 import path from 'path'
@@ -180,6 +180,10 @@ function buildMenu(): Menu {
         {
           label: '检查更新',
           click: () => checkForAppUpdates(true)
+        },
+        {
+          label: '国内下载安装包',
+          click: () => openChinaInstallerDownload()
         },
         { type: 'separator' },
         {

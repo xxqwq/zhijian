@@ -20,9 +20,18 @@ npm run dev
 - `Ctrl+Shift+F` 搜索工作区
 - `Ctrl+\` 显示/隐藏侧边栏
 
+## 下载
+
+国内网络不要直接点 GitHub 的 Assets，会跳到 `release-assets.githubusercontent.com` 并断开。请用加速地址：
+
+- 推荐：https://gh-proxy.com/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.1.exe
+- 备用：https://ghproxy.net/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.1.exe
+
+装好后可用 **帮助 → 检查更新**，或 **帮助 → 国内下载安装包**。
+
 ## 打包
 
-**一键打包（推荐）：** 双击项目根目录的 `打包.bat`。首次会自动安装依赖，完成后会打开 `release` 文件夹，安装包名为 `zhijian-setup-0.1.0.exe`。安装后可用菜单 **帮助 → 检查更新**；新版本会发布到 [GitHub Releases](https://github.com/xxqwq/zhijian/releases)。
+**一键打包（推荐）：** 双击项目根目录的 `打包.bat`。首次会自动安装依赖，完成后会打开 `release` 文件夹，安装包名为 `zhijian-setup-0.1.1.exe`。
 
 也可以在终端执行：
 
