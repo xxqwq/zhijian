@@ -45,6 +45,7 @@ export function FileTree() {
               <TreeNode
                 key={node.path}
                 node={node}
+                depth={0}
                 currentFile={currentFile}
                 onOpen={openFilePath}
                 onMenu={(event, target) => {
@@ -57,6 +58,7 @@ export function FileTree() {
             <button
               className="tree-item"
               type="button"
+              style={{ paddingLeft: 10 }}
               onClick={() =>
                 setPrompt({
                   title: '新建文稿',
@@ -78,17 +80,20 @@ export function FileTree() {
 
 function TreeNode({
   node,
+  depth,
   currentFile,
   onOpen,
   onMenu
 }: {
   node: FileNode
+  depth: number
   currentFile: string | null
   onOpen: (path: string) => Promise<void>
   onMenu: (event: MouseEvent, node: FileNode) => void
 }) {
   const [open, setOpen] = useState(true)
   const isDir = node.type === 'directory'
+  const pad = { paddingLeft: 10 + depth * 18 }
 
   if (isDir) {
     return (
@@ -96,11 +101,12 @@ function TreeNode({
         <button
           className="tree-item"
           type="button"
+          style={pad}
           onClick={() => setOpen((v) => !v)}
           onContextMenu={(event) => onMenu(event, node)}
         >
           <span className="caret">{open ? '▾' : '▸'}</span>
-          <span>{node.name}</span>
+          <span className="tree-label">{node.name}</span>
         </button>
         {open && node.children && (
           <div className="tree-children">
@@ -108,6 +114,7 @@ function TreeNode({
               <TreeNode
                 key={child.path}
                 node={child}
+                depth={depth + 1}
                 currentFile={currentFile}
                 onOpen={onOpen}
                 onMenu={onMenu}
@@ -123,11 +130,12 @@ function TreeNode({
     <button
       className={`tree-item ${currentFile === node.path ? 'active' : ''}`}
       type="button"
+      style={pad}
       onClick={() => void onOpen(node.path)}
       onContextMenu={(event) => onMenu(event, node)}
     >
       <span className="caret">·</span>
-      <span>{node.name}</span>
+      <span className="tree-label">{node.name}</span>
     </button>
   )
 }

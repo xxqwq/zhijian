@@ -20,7 +20,7 @@ export function StatusBar() {
         {dirty ? '未保存 · ' : ''}
         {selectionCount > 0 ? `选中 ${selectionCount} 字 · ` : ''}
         {wordCount} 字 · {readingLabel(wordCount)}
-        {sourceMode ? ' · 源码' : ''}
+        {sourceMode ? ' · 源码对照' : ''}
         {' · '}
         <button
           className={`icon-btn ${typewriter ? 'active' : ''}`}

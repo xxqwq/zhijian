@@ -5,6 +5,8 @@ import type { ResolveResult } from '@shared/openTarget'
 const api = {
   openFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFolder'),
   openFile: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFile'),
+  openPdfFile: (defaultPath?: string): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:openPdf', defaultPath),
   saveFile: (defaultPath?: string): Promise<string | null> =>
     ipcRenderer.invoke('dialog:saveFile', defaultPath),
   exportPath: (
@@ -65,7 +67,12 @@ const api = {
     key?: string
   ): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:open', target, baseFile, key),
-  readBinary: (filePath: string): Promise<Uint8Array> => ipcRenderer.invoke('fs:readBinary', filePath)
+  readBinary: (filePath: string): Promise<Uint8Array> => ipcRenderer.invoke('fs:readBinary', filePath),
+  findPdf: (
+    target: string,
+    baseFile?: string | null,
+    key?: string
+  ): Promise<ResolveResult> => ipcRenderer.invoke('fs:findPdf', target, baseFile, key)
 }
 
 export type InkApi = typeof api

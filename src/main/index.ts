@@ -1,12 +1,17 @@
 import { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, protocol, net, shell } from 'electron'
 import { checkForAppUpdates, openChinaInstallerDownload, setupUpdater } from './updater'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync, statSync } from 'fs'
 import { mkdir, readdir, readFile, writeFile, rename } from 'fs/promises'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { randomBytes } from 'crypto'
 import chokidar, { type FSWatcher } from 'chokidar'
-import { classifyOpenTarget, decodeOpenTarget, type ResolveResult } from '@shared/openTarget'
+import {
+  classifyOpenTarget,
+  decodeOpenTarget,
+  stripPathNoise,
+  type ResolveResult
+} from '@shared/openTarget'
 import type { FileNode, MenuCommand, SearchHit } from '@shared/types'
 import { TEXT_EXTENSIONS } from '@shared/types'
 
@@ -90,6 +95,7 @@ function buildMenu(): Menu {
       submenu: [
         menuItem('打开文件夹…', 'open-folder', 'CmdOrCtrl+O'),
         menuItem('打开文件…', 'open-file', 'CmdOrCtrl+Shift+O'),
+        menuItem('打开 PDF…', 'open-pdf'),
         menuItem('新建文件', 'new-file', 'CmdOrCtrl+N'),
         menuItem('关闭标签', 'close-tab', 'CmdOrCtrl+W'),
         { type: 'separator' },
@@ -274,11 +280,63 @@ function resolveOpenTarget(
       return null
     }
   }
+  filePath = stripPathNoise(filePath)
   if (/^[A-Za-z]:[\\/]/.test(filePath) || filePath.startsWith('\\\\')) {
     return { type: 'path', value: filePath }
   }
   if (!baseFile) return null
   return { type: 'path', value: path.resolve(path.dirname(baseFile), filePath) }
+}
+
+function pickPdfFrom(target: string): string | null {
+  if (!existsSync(target)) return null
+  let info
+  try {
+    info = statSync(target)
+  } catch {
+    return null
+  }
+  if (info.isFile()) return /\.pdf$/i.test(target) ? target : null
+  if (!info.isDirectory()) return null
+  let names: string[]
+  try {
+    names = readdirSync(target).filter(
+      (name) => name.toLowerCase().endsWith('.pdf') && !name.startsWith('~$') && !name.startsWith('.')
+    )
+  } catch {
+    return null
+  }
+  if (names.length === 0) return null
+  if (names.length === 1) return path.join(target, names[0])
+  const hint = path.basename(target).toLowerCase()
+  names.sort((a, b) => {
+    const ascore = a.toLowerCase().includes(hint) ? 1 : 0
+    const bscore = b.toLowerCase().includes(hint) ? 1 : 0
+    if (ascore !== bscore) return bscore - ascore
+    return a.localeCompare(b, 'zh-CN')
+  })
+  return path.join(target, names[0])
+}
+
+function locatePdf(
+  value: string,
+  baseFile?: string | null,
+  key?: string
+): ResolveResult {
+  const resolved = resolveOpenTarget(value, baseFile, key ?? 'pdf')
+  if (!resolved) return { ok: false, error: '无法识别路径' }
+  if (resolved.type === 'url') return { ok: false, error: '这是网页链接，不是本地 PDF' }
+  if (!existsSync(resolved.value)) return { ok: false, error: '找不到这个路径' }
+  const pdf = pickPdfFrom(resolved.value)
+  if (pdf) return { ok: true, kind: 'path', value: pdf }
+  try {
+    if (statSync(resolved.value).isDirectory()) {
+      return { ok: false, error: '这个文件夹里没有 PDF' }
+    }
+  } catch {
+    /* ignore */
+  }
+  return { ok: false, error: '这里没有 PDF 文件' }
 }
 
 async function openResolved(
@@ -322,6 +380,16 @@ function registerIpc(): void {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
       filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }]
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  ipcMain.handle('dialog:openPdf', async (_event, defaultPath?: string) => {
+    if (!mainWindow) return null
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      defaultPath,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
     })
     return result.canceled ? null : result.filePaths[0]
   })
@@ -374,6 +442,12 @@ function registerIpc(): void {
       if (!existsSync(resolved.value)) return { ok: false, error: '找不到这个文件' }
       return { ok: true, kind: 'path', value: resolved.value }
     }
+  )
+
+  ipcMain.handle(
+    'fs:findPdf',
+    (_event, target: string, baseFile?: string | null, key?: string): ResolveResult =>
+      locatePdf(target, baseFile, key)
   )
 
   ipcMain.handle(

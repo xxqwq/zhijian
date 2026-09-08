@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Crepe } from '@milkdown/crepe'
 import { commandsCtx, editorViewCtx, serializerCtx, EditorStatus } from '@milkdown/kit/core'
+import { replaceAll } from '@milkdown/kit/utils'
 import { undoCommand, redoCommand } from '@milkdown/kit/plugin/history'
 import {
   blockquoteSchema,
@@ -35,26 +36,34 @@ interface Props {
   theme: ThemeName
   currentFile: string | null
   onChange: (markdown: string, tabId: string) => void
+  sourceMode?: boolean
 }
 
-export function MilkdownEditor({ fileKey, tabId, markdown, theme, currentFile, onChange }: Props) {
+export function MilkdownEditor({ fileKey, tabId, markdown, theme, currentFile, onChange, sourceMode = false }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const crepeRef = useRef<Crepe | null>(null)
   const onChangeRef = useRef(onChange)
   const fileRef = useRef(currentFile)
   const themeRef = useRef(theme)
+  const markdownRef = useRef(markdown)
+  const frontmatterRef = useRef(splitFrontmatter(markdown).raw)
+  const lastAppliedRef = useRef(markdown)
+  const applyingRef = useRef(false)
+  const sourceModeRef = useRef(sourceMode)
   const { raw } = splitFrontmatter(markdown)
 
   onChangeRef.current = onChange
   fileRef.current = currentFile
   themeRef.current = theme
+  markdownRef.current = markdown
+  frontmatterRef.current = splitFrontmatter(markdown).raw
+  sourceModeRef.current = sourceMode
 
   useEffect(() => {
     const root = rootRef.current
     if (!root) return
     let disposed = false
     const boundTabId = tabId
-    const boundRaw = splitFrontmatter(markdown).raw
     const crepe = new Crepe({
       root,
       defaultValue: splitFrontmatter(markdown).body,
@@ -136,10 +145,33 @@ export function MilkdownEditor({ fileKey, tabId, markdown, theme, currentFile, o
     crepe.editor.use(createCalloutPlugin())
     crepe.editor.use(createLinkOpenPlugin(() => fileRef.current))
 
+    const applyExternal = (next: string): void => {
+      const current = crepeRef.current
+      if (!current) return
+      applyExternalMarkdown(current, next, lastAppliedRef, applyingRef)
+    }
+
+    lastAppliedRef.current = markdown
+    applyingRef.current = false
+
     crepe.on((listener) => {
       listener.markdownUpdated((_ctx, next) => {
         if (disposed) return
-        onChangeRef.current(joinFrontmatter(boundRaw, next), boundTabId)
+        if (applyingRef.current) return
+        if (sourceModeRef.current) {
+          let focused = false
+          try {
+            crepe.editor.action((ctx) => {
+              focused = ctx.get(editorViewCtx).hasFocus()
+            })
+          } catch {
+            return
+          }
+          if (!focused) return
+        }
+        const full = joinFrontmatter(frontmatterRef.current, next)
+        lastAppliedRef.current = full
+        onChangeRef.current(full, boundTabId)
       })
     })
 
@@ -153,12 +185,13 @@ export function MilkdownEditor({ fileKey, tabId, markdown, theme, currentFile, o
         return
       }
       crepeRef.current = crepe
-      unregister = registerEditorCommands((command) => runMilkdownCommand(crepe, command))
-      unregisterSelection = registerSelectionMarkdown(() => readMilkdownSelection(crepe))
+      unregister = registerEditorCommands((command) => runMilkdownCommand(crepe, command), 'wysiwyg')
+      unregisterSelection = registerSelectionMarkdown(() => readMilkdownSelection(crepe), 'wysiwyg')
       unregisterDocument = registerDocumentMarkdown(() => {
         if (crepe.editor.status !== EditorStatus.Created) return null
-        return joinFrontmatter(boundRaw, crepe.getMarkdown())
+        return joinFrontmatter(frontmatterRef.current, crepe.getMarkdown())
       })
+      applyExternal(markdownRef.current)
     })
 
     return () => {
@@ -174,6 +207,28 @@ export function MilkdownEditor({ fileKey, tabId, markdown, theme, currentFile, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileKey])
 
+  useEffect(() => {
+    const crepe = crepeRef.current
+    if (!crepe) return
+    if (markdown === lastAppliedRef.current) return
+    const timer = window.setTimeout(() => {
+      applyExternalMarkdown(crepe, markdown, lastAppliedRef, applyingRef)
+    }, 200)
+    return () => window.clearTimeout(timer)
+  }, [markdown])
+
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    const flush = (): void => {
+      const crepe = crepeRef.current
+      if (!crepe) return
+      applyExternalMarkdown(crepe, markdownRef.current, lastAppliedRef, applyingRef)
+    }
+    root.addEventListener('focusin', flush)
+    return () => root.removeEventListener('focusin', flush)
+  }, [])
+
   return (
     <div className={raw ? 'wysiwyg has-frontmatter' : 'wysiwyg'}>
       {raw ? (
@@ -188,6 +243,25 @@ export function MilkdownEditor({ fileKey, tabId, markdown, theme, currentFile, o
       <div className="editor-root" ref={rootRef} />
     </div>
   )
+}
+
+function applyExternalMarkdown(
+  crepe: Crepe,
+  next: string,
+  lastAppliedRef: { current: string },
+  applyingRef: { current: boolean }
+): void {
+  if (crepe.editor.status !== EditorStatus.Created) return
+  if (next === lastAppliedRef.current) return
+  const { body } = splitFrontmatter(next)
+  const prevBody = splitFrontmatter(lastAppliedRef.current).body
+  lastAppliedRef.current = next
+  if (body === prevBody) return
+  applyingRef.current = true
+  crepe.editor.action(replaceAll(body, true))
+  window.setTimeout(() => {
+    applyingRef.current = false
+  }, 0)
 }
 
 async function uploadImage(file: File, markdownPath: string | null): Promise<string> {

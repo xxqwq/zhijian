@@ -21,7 +21,7 @@ import {
 import { PdfViewer } from '@renderer/components/Pdf/PdfViewer'
 import { copyAs } from '@renderer/lib/copyAs'
 import { countWords } from '@renderer/lib/markdown'
-import { toggleNotePdf } from '@renderer/lib/openLocal'
+import { pickPdfFile, syncNotePdf, toggleNotePdf } from '@renderer/lib/openLocal'
 import { isPdfPaneActive, requestPdfFind, setPdfPaneActive } from '@renderer/lib/pdfUi'
 import { fileNameOf, useAppStore } from '@renderer/store/appStore'
 import { writeStageScroll } from '@renderer/lib/tabs'
@@ -81,6 +81,10 @@ export default function App() {
   }, [content, currentFile, savedContent])
 
   useEffect(() => {
+    void syncNotePdf()
+  }, [activeId, currentFile])
+
+  useEffect(() => {
     const tab = useAppStore.getState().tabs.find((item) => item.id === activeId)
     const top = tab?.scrollTop ?? 0
     writeStageScroll(top)
@@ -101,7 +105,7 @@ export default function App() {
   }, [toast, setToast])
 
   useEffect(() => {
-    const stage = document.querySelector('.paper-stage')
+    const stage = document.querySelector('.preview-pane')
     if (!(stage instanceof HTMLElement)) return
     let timer = 0
     const onScroll = (): void => {
@@ -168,7 +172,7 @@ export default function App() {
       if (!store.typewriter) return
       const selection = window.getSelection()
       if (!selection || selection.rangeCount === 0) return
-      const stage = document.querySelector('.paper-stage')
+      const stage = document.querySelector('.preview-pane')
       if (!(stage instanceof HTMLElement)) return
       const node = selection.anchorNode
       if (!node || !stage.contains(node)) return
@@ -204,7 +208,7 @@ export default function App() {
           <button
             className={`icon-btn ${pdfPath ? 'active' : ''}`}
             type="button"
-            title="PDF 阅读器 Ctrl+Shift+P"
+            title="打开或关闭 PDF 阅读器"
             onClick={() => void toggleNotePdf()}
           >
             PDF
@@ -240,11 +244,17 @@ export default function App() {
       >
         {sidebarOpen && <FileTree />}
         <div className={`stage-split ${pdfPath ? 'has-pdf' : ''}`}>
-          <main className="paper-stage" onPointerDown={() => setPdfPaneActive(false)}>
-            <div className="paper-sheet">
-              {sourceMode ? (
+          <main
+            className={`paper-stage ${sourceMode ? 'is-split' : ''}`}
+            onPointerDown={() => setPdfPaneActive(false)}
+          >
+            {sourceMode ? (
+              <div className="source-pane">
                 <SourceEditor />
-              ) : (
+              </div>
+            ) : null}
+            <div className="preview-pane">
+              <div className="paper-sheet">
                 <MilkdownEditor
                   key={activeId}
                   fileKey={`${activeId}:${editorEpoch}`}
@@ -253,8 +263,9 @@ export default function App() {
                   theme={theme}
                   currentFile={currentFile}
                   onChange={setContent}
+                  sourceMode={sourceMode}
                 />
-              )}
+              </div>
             </div>
           </main>
           {pdfPath ? <PdfViewer path={pdfPath} width={pdfWidth} /> : null}
@@ -280,6 +291,9 @@ async function handleMenu(command: MenuCommand): Promise<void> {
       break
     case 'open-file':
       await store.openFileDialog()
+      break
+    case 'open-pdf':
+      await pickPdfFile()
       break
     case 'new-file':
       await store.newUntitled()

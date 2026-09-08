@@ -70,7 +70,7 @@ flowchart LR
 - \`Ctrl+P\` 快速打开最近文件和工作区文稿
 - \`Ctrl+Tab\` / \`Ctrl+Shift+Tab\` 切换已打开的文稿；\`Ctrl+W\` 关闭当前标签
 - \`Ctrl+Shift+T\` 打字机滚动，光标尽量停在纸面中央
-- \`Ctrl+/\` 在所见即所得和 Markdown 源码之间切换
+- \`Ctrl+/\` 打开源码对照：左侧 Markdown 源码，右侧实时预览
 - 划选一段文字，状态栏会显示选中字数
 - \`Ctrl+Shift+C\` 复制为 Markdown；\`Ctrl+Alt+C\` 复制为带样式的 HTML，可贴进 Word 或网页编辑器
 `

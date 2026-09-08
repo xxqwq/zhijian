@@ -10,6 +10,7 @@ import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { searchPdfDocument, type PdfMatch } from '@renderer/lib/pdfSearch'
 import { readPdfPage, writePdfPage } from '@renderer/lib/pdfPages'
 import { onPdfFindRequest, setPdfPaneActive } from '@renderer/lib/pdfUi'
+import { pickPdfFile } from '@renderer/lib/openLocal'
 import { useAppStore } from '@renderer/store/appStore'
 
 GlobalWorkerOptions.workerSrc = pdfWorker
@@ -20,7 +21,7 @@ interface Props {
 }
 
 export function PdfViewer({ path, width }: Props) {
-  const closePdf = useAppStore((s) => s.closePdf)
+  const dismissPdf = useAppStore((s) => s.dismissPdf)
   const setPdfWidth = useAppStore((s) => s.setPdfWidth)
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [pageCount, setPageCount] = useState(0)
@@ -240,12 +241,20 @@ export function PdfViewer({ path, width }: Props) {
           <button
             type="button"
             className="icon-btn"
+            title="选择任意 PDF"
+            onClick={() => void pickPdfFile()}
+          >
+            打开
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
             title="用系统阅读器打开"
             onClick={() => void window.ink.openTarget(path)}
           >
             系统
           </button>
-          <button type="button" className="icon-btn" onClick={() => closePdf()}>
+          <button type="button" className="icon-btn" onClick={() => dismissPdf()}>
             关闭
           </button>
         </div>

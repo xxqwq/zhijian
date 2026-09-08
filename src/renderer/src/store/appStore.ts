@@ -47,6 +47,7 @@ interface AppState {
   activeId: string
   pdfPath: string | null
   pdfWidth: number
+  pdfDismissed: Record<string, true>
 
   dirty: () => boolean
   setTheme: (theme: ThemeName) => void
@@ -73,6 +74,7 @@ interface AppState {
   restoreSession: () => Promise<void>
   openPdf: (path: string) => void
   closePdf: () => void
+  dismissPdf: () => void
   setPdfWidth: (width: number) => void
   refreshTree: () => Promise<void>
   confirmIfDirty: (tab?: OpenTab) => Promise<boolean>
@@ -142,6 +144,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeId: initial.id,
   pdfPath: null,
   pdfWidth: readPdfWidth(),
+  pdfDismissed: {},
 
   dirty: () => get().tabs.some(isTabDirty),
 
@@ -298,11 +301,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   openPdf: (pdfPath) => {
-    set({ pdfPath })
+    const currentFile = get().currentFile
+    const pdfDismissed = { ...get().pdfDismissed }
+    if (currentFile) delete pdfDismissed[currentFile]
+    set({ pdfPath, pdfDismissed })
     get().persistSession()
   },
   closePdf: () => {
     set({ pdfPath: null })
+    get().persistSession()
+  },
+  dismissPdf: () => {
+    const { currentFile, pdfDismissed } = get()
+    set({
+      pdfPath: null,
+      pdfDismissed: currentFile ? { ...pdfDismissed, [currentFile]: true } : pdfDismissed
+    })
     get().persistSession()
   },
   setPdfWidth: (pdfWidth) => {
@@ -359,9 +373,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         recentFiles: session.recent
       })
       get().syncWindowTitle()
-      if (session.pdfPath && (await window.ink.pathExists(session.pdfPath))) {
-        set({ pdfPath: session.pdfPath })
-      }
     } catch {
       /* 路径失效或旧预加载接口时静默跳过 */
     }

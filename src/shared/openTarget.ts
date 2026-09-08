@@ -17,6 +17,14 @@ export function decodeOpenTarget(value: string): string {
   }
 }
 
+/** Strip trailing comments like ` (与本译文同目录)` and extra slashes. */
+export function stripPathNoise(value: string): string {
+  return value
+    .replace(/\s*[\(（][^\)）]*[\)）]\s*$/u, '')
+    .replace(/[\\/]+$/, '')
+    .trim()
+}
+
 export function classifyOpenTarget(value: string, key?: string): 'url' | 'path' | null {
   const v = decodeOpenTarget(value)
   if (!v) return null

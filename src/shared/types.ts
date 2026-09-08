@@ -16,6 +16,7 @@ export interface SearchHit {
 export type MenuCommand =
   | 'open-folder'
   | 'open-file'
+  | 'open-pdf'
   | 'new-file'
   | 'save'
   | 'save-as'

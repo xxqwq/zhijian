@@ -42,12 +42,18 @@ export function tabLabel(tab: OpenTab): string {
   return '未命名'
 }
 
-export function readStageScroll(): number {
+export function previewScrollEl(): HTMLElement | null {
+  const pane = document.querySelector('.preview-pane')
+  if (pane instanceof HTMLElement) return pane
   const stage = document.querySelector('.paper-stage')
-  return stage instanceof HTMLElement ? stage.scrollTop : 0
+  return stage instanceof HTMLElement ? stage : null
+}
+
+export function readStageScroll(): number {
+  return previewScrollEl()?.scrollTop ?? 0
 }
 
 export function writeStageScroll(top: number): void {
-  const stage = document.querySelector('.paper-stage')
-  if (stage instanceof HTMLElement) stage.scrollTop = top
+  const stage = previewScrollEl()
+  if (stage) stage.scrollTop = top
 }

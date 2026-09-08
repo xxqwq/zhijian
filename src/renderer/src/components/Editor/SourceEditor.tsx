@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { registerEditorCommands, registerSelectionMarkdown, type EditorCommand } from '@renderer/lib/editorCommands'
+import { bindSplitScroll } from '@renderer/lib/scrollSync'
 import { useAppStore } from '@renderer/store/appStore'
 
 export function SourceEditor() {
@@ -12,19 +13,27 @@ export function SourceEditor() {
       const textarea = textareaRef.current
       if (!textarea) return false
       return applySourceCommand(textarea, command, setContent)
-    })
+    }, 'source')
     const offSelection = registerSelectionMarkdown(() => {
       const textarea = textareaRef.current
       if (!textarea) return null
       const { selectionStart, selectionEnd, value } = textarea
       if (selectionStart === selectionEnd) return null
       return value.slice(selectionStart, selectionEnd)
-    })
+    }, 'source')
+    textareaRef.current?.focus()
     return () => {
       offCommands()
       offSelection()
     }
   }, [setContent])
+
+  useEffect(() => {
+    const source = textareaRef.current
+    const preview = document.querySelector('.preview-pane')
+    if (!source || !(preview instanceof HTMLElement)) return
+    return bindSplitScroll(source, preview, () => useAppStore.getState().content)
+  }, [])
 
   return (
     <textarea

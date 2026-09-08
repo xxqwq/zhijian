@@ -1,8 +1,43 @@
 import { classifyOpenTarget, isPdfPath } from '@shared/openTarget'
 import { parseFrontmatterFields, splitFrontmatter } from '@renderer/lib/frontmatter'
+import { readPdfPick, writePdfPick } from '@renderer/lib/pdfPicks'
 import { useAppStore } from '@renderer/store/appStore'
 
 export { classifyOpenTarget, isPathLike, isPdfPath } from '@shared/openTarget'
+
+function rememberPdf(pdfPath: string): void {
+  writePdfPick(useAppStore.getState().currentFile, pdfPath)
+}
+
+export async function pickPdfFile(): Promise<void> {
+  const store = useAppStore.getState()
+  const start = store.pdfPath ?? store.currentFile ?? store.workspacePath ?? undefined
+  const filePath =
+    typeof window.ink?.openPdfFile === 'function'
+      ? await window.ink.openPdfFile(start)
+      : await pickPdfViaInput()
+  if (!filePath) return
+  rememberPdf(filePath)
+  store.openPdf(filePath)
+}
+
+function pickPdfViaInput(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'application/pdf,.pdf'
+    input.addEventListener(
+      'change',
+      () => {
+        const file = input.files?.[0] as (File & { path?: string }) | undefined
+        resolve(file?.path || null)
+      },
+      { once: true }
+    )
+    input.addEventListener('cancel', () => resolve(null), { once: true })
+    input.click()
+  })
+}
 
 export async function openLocal(
   value: string,
@@ -19,9 +54,20 @@ export async function openLocal(
       useAppStore.getState().setToast(resolved.error || '无法打开')
       return
     }
-    if (resolved.kind === 'path' && isPdfPath(resolved.value)) {
-      useAppStore.getState().openPdf(resolved.value)
-      return
+    if (resolved.kind === 'path') {
+      if (isPdfPath(resolved.value)) {
+        rememberPdf(resolved.value)
+        useAppStore.getState().openPdf(resolved.value)
+        return
+      }
+      if (window.ink.findPdf) {
+        const pdf = await window.ink.findPdf(resolved.value, markdownPath ?? null, key)
+        if (pdf.ok && pdf.kind === 'path') {
+          rememberPdf(pdf.value)
+          useAppStore.getState().openPdf(pdf.value)
+          return
+        }
+      }
     }
     const opened = await window.ink.openTarget(resolved.value, markdownPath ?? null, key)
     if (!opened.ok) {
@@ -35,29 +81,79 @@ export async function openLocal(
 export async function toggleNotePdf(): Promise<void> {
   const store = useAppStore.getState()
   if (store.pdfPath) {
-    store.closePdf()
+    store.dismissPdf()
     return
   }
-  await openPdfFromNote(store.content, store.currentFile)
+  const fromNote = await findPdfForNote(store.content, store.currentFile, { folderFallback: true })
+  if (fromNote) {
+    store.openPdf(fromNote)
+    return
+  }
+  const remembered = readPdfPick(store.currentFile)
+  if (remembered && (await window.ink.pathExists(remembered))) {
+    store.openPdf(remembered)
+    return
+  }
+  await pickPdfFile()
 }
 
-export async function openPdfFromNote(
+export async function findPdfForNote(
   markdown: string,
-  markdownPath: string | null
-): Promise<void> {
+  markdownPath: string | null,
+  options?: { folderFallback?: boolean }
+): Promise<string | null> {
+  if (!window.ink?.findPdf) return null
   const fields = parseFrontmatterFields(splitFrontmatter(markdown).raw)
   const ordered = [
-    ...fields.filter((item) => item.key === 'pdf'),
+    ...fields.filter((item) => item.key === 'pdf' || /pdf/i.test(item.key)),
     ...fields.filter((item) => item.key === 'source'),
-    ...fields.filter((item) => item.key !== 'pdf' && item.key !== 'source' && isPdfPath(item.value))
+    ...fields.filter(
+      (item) => item.key !== 'pdf' && item.key !== 'source' && !/pdf/i.test(item.key) && isPdfPath(item.value)
+    )
   ]
+  const seen = new Set<string>()
   for (const field of ordered) {
-    if (!window.ink?.resolveTarget) break
-    const resolved = await window.ink.resolveTarget(field.value, markdownPath, field.key)
-    if (resolved.ok && resolved.kind === 'path' && isPdfPath(resolved.value)) {
-      useAppStore.getState().openPdf(resolved.value)
-      return
-    }
+    const token = `${field.key}:${field.value}`
+    if (seen.has(token)) continue
+    seen.add(token)
+    const found = await window.ink.findPdf(field.value, markdownPath, field.key)
+    if (found.ok && found.kind === 'path') return found.value
   }
-  useAppStore.getState().setToast('这篇笔记没有可打开的 PDF')
+  if (options?.folderFallback && markdownPath) {
+    const found = await window.ink.findPdf('.', markdownPath, 'pdf')
+    if (found.ok && found.kind === 'path') return found.value
+  }
+  return null
+}
+
+let syncSeq = 0
+
+export async function syncNotePdf(): Promise<void> {
+  const seq = ++syncSeq
+  const store = useAppStore.getState()
+  const note = store.currentFile
+  const tabId = store.activeId
+  if (note && store.pdfDismissed[note]) {
+    if (store.pdfPath) store.closePdf()
+    return
+  }
+  const remembered = readPdfPick(note)
+  const fromNote = await findPdfForNote(store.content, note, { folderFallback: false })
+  if (seq !== syncSeq) return
+  const now = useAppStore.getState()
+  if (now.activeId !== tabId || now.currentFile !== note) return
+  if (note && now.pdfDismissed[note]) return
+  const rememberedOk =
+    Boolean(remembered) &&
+    (typeof window.ink.pathExists === 'function' ? await window.ink.pathExists(remembered as string) : true)
+  if (seq !== syncSeq) return
+  const latest = useAppStore.getState()
+  if (latest.activeId !== tabId || latest.currentFile !== note) return
+  if (note && latest.pdfDismissed[note]) return
+  const pdf = rememberedOk && remembered ? remembered : fromNote
+  if (pdf) {
+    if (latest.pdfPath !== pdf) latest.openPdf(pdf)
+    return
+  }
+  if (latest.pdfPath) latest.closePdf()
 }

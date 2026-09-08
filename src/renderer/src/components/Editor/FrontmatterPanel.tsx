@@ -104,7 +104,12 @@ function FieldValue({
 }) {
   const kind = classifyOpenTarget(field.value, field.key)
   if (!kind) return field.value
-  const title = kind === 'url' ? '打开链接' : isPdfPath(field.value) ? '在纸间中阅读' : '用系统默认程序打开'
+  const title =
+    kind === 'url'
+      ? '打开链接'
+      : isPdfPath(field.value) || field.key === 'pdf' || field.key === 'source'
+        ? '在纸间中阅读'
+        : '用系统默认程序打开'
   return (
     <button
       className="fm-open"
