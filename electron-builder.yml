@@ -1,0 +1,17 @@
+appId: com.zhijian.markdown
+productName: 纸间
+directories:
+  buildResources: resources
+  output: release
+files:
+  - out/**/*
+  - package.json
+asar: true
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-Setup.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: 纸间

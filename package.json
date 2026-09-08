@@ -1,0 +1,42 @@
+{
+  "name": "zhijian",
+  "version": "0.1.0",
+  "description": "纸间 — 类 Typora Markdown 桌面编辑器",
+  "main": "./out/main/index.js",
+  "author": "纸间",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "build:win": "npm run build && electron-builder --win --publish never",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "@milkdown/crepe": "^7.17.1",
+    "@milkdown/kit": "^7.17.1",
+    "chokidar": "^4.0.3",
+    "katex": "^0.16.22",
+    "markdown-it": "^14.1.0",
+    "mermaid": "^11.9.0",
+    "pdfjs-dist": "^6.3.289",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.18.1",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "electron": "^37.4.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^4.0.1",
+    "typescript": "^5.9.2",
+    "vite": "^6.3.5"
+  }
+}
