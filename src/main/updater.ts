@@ -27,15 +27,8 @@ function applyFeed(url: string): void {
   })
 }
 
-function currentInstallerFileName(): string {
-  const version = app.getVersion()
-  if (process.platform === 'darwin') return `zhijian-${version}-mac.dmg`
-  if (process.platform === 'linux') return `zhijian-${version}.AppImage`
-  return `zhijian-setup-${version}.exe`
-}
-
 export function openChinaInstallerDownload(): void {
-  const url = `${UPDATE_FEEDS[0]}/${currentInstallerFileName()}`
+  const url = `${UPDATE_FEEDS[0]}/zhijian-setup-${app.getVersion()}.exe`
   void shell.openExternal(url)
 }
 

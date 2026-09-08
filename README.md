@@ -14,8 +14,6 @@ npm run dev
 
 ## 常用快捷键
 
-macOS 用 `Command` 代替下面的 `Ctrl`。
-
 - `Ctrl+O` 打开文件夹
 - `Ctrl+S` 保存（编辑后约 0.4 秒也会自动保存）
 - `Ctrl+F` 查找当前文稿
@@ -24,31 +22,22 @@ macOS 用 `Command` 代替下面的 `Ctrl`。
 
 ## 下载
 
-国内网络不要直接点 GitHub 的 Assets，会跳到 `release-assets.githubusercontent.com` 并断开。请用加速地址（发版完成后可用）：
+国内网络不要直接点 GitHub 的 Assets，会跳到 `release-assets.githubusercontent.com` 并断开。请用加速地址：
 
-- Windows：https://gh-proxy.com/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.2.exe
-- macOS：https://gh-proxy.com/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-0.1.2-mac.dmg
-- Linux：https://gh-proxy.com/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-0.1.2.AppImage
+- 推荐：https://gh-proxy.com/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.1.exe
+- 备用：https://ghproxy.net/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.1.exe
 
 装好后可用 **帮助 → 检查更新**，或 **帮助 → 国内下载安装包**。
 
-macOS 安装包未签名。第一次打开若被拦截，请到 **系统设置 → 隐私与安全性** 允许打开。
-
 ## 打包
 
-**Windows：** 双击项目根目录的 `打包.bat`，完成后打开 `release` 文件夹。
+**一键打包（推荐）：** 双击项目根目录的 `打包.bat`。首次会自动安装依赖，完成后会打开 `release` 文件夹，安装包名为 `zhijian-setup-0.1.1.exe`。
 
-也可以在对应系统上执行：
+也可以在终端执行：
 
 ```powershell
-# Windows
+$env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
+$env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://npmmirror.com/mirrors/electron-builder-binaries/"
+$env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
 npm run build:win
-
-# macOS（必须在 Mac 上）
-npm run build:mac
-
-# Linux
-npm run build:linux
 ```
-
-跨平台安装包由 GitHub Actions 构建：推送 `v*` 标签（例如 `v0.1.2`），或在仓库的 Actions 页手动运行 **Release** 工作流。macOS 会打成 Intel + Apple Silicon 通用包。
