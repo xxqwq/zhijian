@@ -10,7 +10,7 @@ asar: true
 win:
   target:
     - nsis
-  artifactName: ${productName}-${version}-Setup.${ext}
+  artifactName: zhijian-setup-${version}.${ext}
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

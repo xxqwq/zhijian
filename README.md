@@ -22,7 +22,7 @@ npm run dev
 
 ## 打包
 
-**一键打包（推荐）：** 双击项目根目录的 `打包.bat`。首次会自动安装依赖，完成后会打开 `release` 文件夹，安装包名为 `纸间-0.1.0-Setup.exe`。安装后可用菜单 **帮助 → 检查更新**；新版本会发布到 [GitHub Releases](https://github.com/xxqwq/zhijian/releases)。
+**一键打包（推荐）：** 双击项目根目录的 `打包.bat`。首次会自动安装依赖，完成后会打开 `release` 文件夹，安装包名为 `zhijian-setup-0.1.0.exe`。安装后可用菜单 **帮助 → 检查更新**；新版本会发布到 [GitHub Releases](https://github.com/xxqwq/zhijian/releases)。
 
 也可以在终端执行：
 
