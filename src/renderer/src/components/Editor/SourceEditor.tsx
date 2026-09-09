@@ -1,12 +1,28 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { registerEditorCommands, registerSelectionMarkdown, type EditorCommand } from '@renderer/lib/editorCommands'
-import { bindSplitScroll } from '@renderer/lib/scrollSync'
+import { findTexSlots, renderTexBackdrop } from '@renderer/lib/texSlots'
+import { isTexSource } from '@shared/types'
 import { useAppStore } from '@renderer/store/appStore'
 
 export function SourceEditor() {
   const content = useAppStore((s) => s.content)
+  const currentFile = useAppStore((s) => s.currentFile)
   const setContent = useAppStore((s) => s.setContent)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const backdropRef = useRef<HTMLPreElement>(null)
+  const texDoc = isTexSource(currentFile ?? '')
+  const backdrop = useMemo(
+    () => (texDoc ? renderTexBackdrop(content, findTexSlots(content)) : ''),
+    [content, texDoc]
+  )
+
+  const syncBackdrop = (): void => {
+    const source = textareaRef.current
+    const layer = backdropRef.current
+    if (!source || !layer) return
+    layer.scrollTop = source.scrollTop
+    layer.scrollLeft = source.scrollLeft
+  }
 
   useEffect(() => {
     const offCommands = registerEditorCommands((command) => {
@@ -29,21 +45,41 @@ export function SourceEditor() {
   }, [setContent])
 
   useEffect(() => {
-    const source = textareaRef.current
-    const preview = document.querySelector('.preview-pane')
-    if (!source || !(preview instanceof HTMLElement)) return
-    return bindSplitScroll(source, preview, () => useAppStore.getState().content)
-  }, [])
+    syncBackdrop()
+  }, [backdrop, content])
 
-  return (
+  useEffect(() => {
+    const wrap = textareaRef.current?.parentElement
+    if (!wrap) return
+    const ro = new ResizeObserver(() => syncBackdrop())
+    ro.observe(wrap)
+    return () => ro.disconnect()
+  }, [texDoc])
+
+  const editor = (
     <textarea
       ref={textareaRef}
       className="source-editor"
       spellCheck={false}
       value={content}
       onChange={(event) => setContent(event.target.value)}
-      aria-label="Markdown 源码"
+      onScroll={syncBackdrop}
+      aria-label="源码"
     />
+  )
+
+  if (!texDoc) return editor
+
+  return (
+    <div className="source-editor-wrap">
+      <pre
+        ref={backdropRef}
+        className="source-editor-backdrop"
+        aria-hidden
+        dangerouslySetInnerHTML={{ __html: backdrop }}
+      />
+      {editor}
+    </div>
   )
 }
 

@@ -151,6 +151,8 @@ export function bindSplitScroll(
   source.addEventListener('scroll', onSource, { passive: true })
   preview.addEventListener('scroll', onPreview, { passive: true })
 
+  let resizeRaf = 0
+
   const syncFromPreview = (): void => {
     lock = preview
     window.clearTimeout(lockTimer)
@@ -167,14 +169,18 @@ export function bindSplitScroll(
 
   const resize = new ResizeObserver(() => {
     anchors = null
-    if (document.activeElement === source) apply(source, preview)
-    else apply(preview, source)
+    window.cancelAnimationFrame(resizeRaf)
+    resizeRaf = window.requestAnimationFrame(() => {
+      if (document.activeElement === source) apply(source, preview)
+      else apply(preview, source)
+    })
   })
   resize.observe(source)
   resize.observe(preview)
 
   return () => {
     window.cancelAnimationFrame(frame)
+    window.cancelAnimationFrame(resizeRaf)
     window.clearTimeout(later)
     window.clearTimeout(lockTimer)
     source.removeEventListener('scroll', onSource)

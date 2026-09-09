@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, protocol, net, shell } from 'electron'
 import { checkForAppUpdates, openChinaInstallerDownload, setupUpdater } from './updater'
 import { existsSync, readdirSync, statSync } from 'fs'
-import { mkdir, readdir, readFile, writeFile, rename } from 'fs/promises'
+import { copyFile, mkdir, readdir, readFile, writeFile, rename } from 'fs/promises'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { randomBytes } from 'crypto'
@@ -13,7 +13,8 @@ import {
   type ResolveResult
 } from '@shared/openTarget'
 import type { FileNode, MenuCommand, SearchHit } from '@shared/types'
-import { TEXT_EXTENSIONS } from '@shared/types'
+import { TEXT_EXTENSIONS, isTexAuxFile } from '@shared/types'
+import { compileTex, getTexPathInfo, importTexTemplate, initLatexSettings, setUserTexBin } from './latex'
 
 app.setName('纸间')
 
@@ -52,7 +53,9 @@ function menuItem(
   }
 }
 
-function isTextFile(name: string): boolean {
+function isTreeFile(name: string): boolean {
+  if (isTexAuxFile(name)) return false
+  if (name.toLowerCase().endsWith('.pdf')) return true
   return TEXT_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext))
 }
 
@@ -76,7 +79,7 @@ async function readTree(dir: string): Promise<FileNode[]> {
         type: 'directory',
         children: await readTree(full)
       })
-    } else if (isTextFile(entry.name)) {
+    } else if (isTreeFile(entry.name)) {
       nodes.push({ name: entry.name, path: full, type: 'file' })
     }
   }
@@ -96,6 +99,8 @@ function buildMenu(): Menu {
         menuItem('打开文件夹…', 'open-folder', 'CmdOrCtrl+O'),
         menuItem('打开文件…', 'open-file', 'CmdOrCtrl+Shift+O'),
         menuItem('打开 PDF…', 'open-pdf'),
+        menuItem('导入 LaTeX 模板…', 'tex-import'),
+        menuItem('TeX 路径…', 'tex-path'),
         menuItem('新建文件', 'new-file', 'CmdOrCtrl+N'),
         menuItem('关闭标签', 'close-tab', 'CmdOrCtrl+W'),
         { type: 'separator' },
@@ -104,6 +109,7 @@ function buildMenu(): Menu {
         { type: 'separator' },
         menuItem('导出 HTML…', 'export-html'),
         menuItem('导出 PDF…', 'export-pdf'),
+        menuItem('编译 LaTeX', 'tex-compile', 'CmdOrCtrl+Enter'),
         { type: 'separator' },
         { role: 'quit', label: '退出' }
       ]
@@ -214,8 +220,9 @@ async function createWindow(): Promise<void> {
     minWidth: 860,
     minHeight: 560,
     show: false,
-    backgroundColor: '#f3eadc',
+    backgroundColor: '#16130f',
     autoHideMenuBar: false,
+    fullscreenable: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -227,6 +234,10 @@ async function createWindow(): Promise<void> {
   mainWindow.on('ready-to-show', () => mainWindow?.show())
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+  void mainWindow.webContents.setVisualZoomLevelLimits(1, 1)
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.webContents.setZoomFactor(1)
   })
 
   Menu.setApplicationMenu(buildMenu())
@@ -379,7 +390,11 @@ function registerIpc(): void {
     if (!mainWindow) return null
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }]
+      filters: [
+        { name: '文稿', extensions: ['md', 'markdown', 'txt', 'tex', 'bib'] },
+        { name: 'Markdown', extensions: ['md', 'markdown', 'txt'] },
+        { name: 'LaTeX', extensions: ['tex', 'bib', 'sty', 'cls'] }
+      ]
     })
     return result.canceled ? null : result.filePaths[0]
   })
@@ -394,11 +409,47 @@ function registerIpc(): void {
     return result.canceled ? null : result.filePaths[0]
   })
 
+  ipcMain.handle('dialog:texTemplate', async () => {
+    if (!mainWindow) return null
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '导入会议 LaTeX 模板',
+      properties: ['openFile', 'openDirectory'],
+      filters: [
+        { name: 'ZIP 模板', extensions: ['zip'] },
+        { name: '所有文件', extensions: ['*'] }
+      ]
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  ipcMain.handle('tex:compile', (_event, texPath: string) => compileTex(texPath))
+
+  ipcMain.handle('tex:import', async (_event, workspace: string, source: string) =>
+    importTexTemplate(workspace, source)
+  )
+
+  ipcMain.handle('tex:getPath', () => getTexPathInfo())
+
+  ipcMain.handle('tex:setPath', (_event, binPath: string) => setUserTexBin(binPath))
+
+  ipcMain.handle('dialog:texBin', async (_event, defaultPath?: string) => {
+    if (!mainWindow) return null
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择 TeX 的 bin 目录',
+      defaultPath,
+      properties: ['openDirectory']
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
   ipcMain.handle('dialog:saveFile', async (_event, defaultPath?: string) => {
     if (!mainWindow) return null
     const result = await dialog.showSaveDialog(mainWindow, {
       defaultPath,
-      filters: [{ name: 'Markdown', extensions: ['md'] }]
+      filters: [
+        { name: 'Markdown', extensions: ['md'] },
+        { name: 'LaTeX', extensions: ['tex'] }
+      ]
     })
     return result.canceled ? null : result.filePath
   })
@@ -461,6 +512,13 @@ function registerIpc(): void {
     return new Uint8Array(buf)
   })
 
+  ipcMain.handle('fs:copyFile', async (_event, src: string, dest: string) => {
+    if (!existsSync(src)) throw new Error('找不到要导出的文件')
+    await mkdir(path.dirname(dest), { recursive: true })
+    if (path.resolve(src) === path.resolve(dest)) return
+    await copyFile(src, dest)
+  })
+
   ipcMain.handle('fs:readFile', (_event, filePath: string) =>
     readFile(filePath, 'utf-8')
   )
@@ -471,7 +529,9 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('fs:createFile', async (_event, dir: string, name: string) => {
-    const filePath = path.join(dir, name.endsWith('.md') ? name : `${name}.md`)
+    const trimmed = name.trim() || '未命名.md'
+    const fileName = path.extname(trimmed) ? trimmed : `${trimmed}.md`
+    const filePath = path.join(dir, fileName)
     if (existsSync(filePath)) throw new Error('同名文件已存在')
     await writeFile(filePath, '', 'utf-8')
     return filePath
@@ -525,7 +585,7 @@ function registerIpc(): void {
         if (entry.isDirectory()) {
           if (['node_modules', 'out', 'dist', 'release'].includes(entry.name)) continue
           await walk(full)
-        } else if (isTextFile(entry.name)) {
+        } else if (isTreeFile(entry.name) && !entry.name.toLowerCase().endsWith('.pdf')) {
           const text = await readFile(full, 'utf-8')
           const lines = text.split(/\r?\n/)
           lines.forEach((line, index) => {
@@ -576,7 +636,10 @@ function registerIpc(): void {
     await watcher?.close()
     watcher = chokidar.watch(dir, {
       ignoreInitial: true,
-      ignored: /(^|[/\\])\../
+      ignored: [
+        /(^|[/\\])\../,
+        /\.(aux|bbl|blg|fdb_latexmk|fls|log|lof|lot|nav|out|snm|synctex\.gz|toc|vrb)$/i
+      ]
     })
     const notify = (): void => {
       mainWindow?.webContents.send('watch:change')
@@ -620,6 +683,7 @@ app.whenReady().then(async () => {
     }
   })
 
+  initLatexSettings(app.getPath('userData'))
   registerIpc()
   await createWindow()
   setupUpdater(() => mainWindow)

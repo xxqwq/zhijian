@@ -1,4 +1,5 @@
 import { classifyOpenTarget, isPdfPath } from '@shared/openTarget'
+import { isTexSource } from '@shared/types'
 import { parseFrontmatterFields, splitFrontmatter } from '@renderer/lib/frontmatter'
 import { readPdfPick, writePdfPick } from '@renderer/lib/pdfPicks'
 import { useAppStore } from '@renderer/store/appStore'
@@ -138,14 +139,29 @@ export async function syncNotePdf(): Promise<void> {
     return
   }
   const remembered = readPdfPick(note)
-  const fromNote = await findPdfForNote(store.content, note, { folderFallback: false })
-  if (seq !== syncSeq) return
-  const now = useAppStore.getState()
-  if (now.activeId !== tabId || now.currentFile !== note) return
-  if (note && now.pdfDismissed[note]) return
   const rememberedOk =
     Boolean(remembered) &&
     (typeof window.ink.pathExists === 'function' ? await window.ink.pathExists(remembered as string) : true)
+  if (seq !== syncSeq) return
+  if (note && isTexSource(note)) {
+    const sibling = note.replace(/\.tex$/i, '.pdf')
+    const fromCompile =
+      rememberedOk && remembered
+        ? remembered
+        : (await window.ink.pathExists(sibling))
+          ? sibling
+          : null
+    if (seq !== syncSeq) return
+    const latest = useAppStore.getState()
+    if (latest.activeId !== tabId || latest.currentFile !== note) return
+    if (fromCompile) {
+      if (latest.pdfPath !== fromCompile) latest.openPdf(fromCompile)
+      return
+    }
+    if (latest.pdfPath) latest.closePdf()
+    return
+  }
+  const fromNote = await findPdfForNote(store.content, note, { folderFallback: false })
   if (seq !== syncSeq) return
   const latest = useAppStore.getState()
   if (latest.activeId !== tabId || latest.currentFile !== note) return

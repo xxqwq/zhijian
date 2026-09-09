@@ -8,6 +8,7 @@ import { SearchPanel } from '@renderer/components/Search/SearchPanel'
 import { QuickOpen } from '@renderer/components/QuickOpen'
 import { StatusBar } from '@renderer/components/StatusBar/StatusBar'
 import { PromptDialog } from '@renderer/components/PromptDialog'
+import { TexPathDialog } from '@renderer/components/TexPathDialog'
 import { TabBar } from '@renderer/components/TabBar'
 import { ThemePicker } from '@renderer/components/ThemePicker'
 import { buildExportHtml } from '@renderer/lib/exportHtml'
@@ -21,6 +22,13 @@ import {
 import { PdfViewer } from '@renderer/components/Pdf/PdfViewer'
 import { copyAs } from '@renderer/lib/copyAs'
 import { countWords } from '@renderer/lib/markdown'
+import {
+  compileCurrentTex,
+  exportCurrentTexPdf,
+  importConferenceTemplate,
+  isTexFile,
+  isTexSource
+} from '@renderer/lib/tex'
 import { pickPdfFile, syncNotePdf, toggleNotePdf } from '@renderer/lib/openLocal'
 import { isPdfPaneActive, requestPdfFind, setPdfPaneActive } from '@renderer/lib/pdfUi'
 import { fileNameOf, useAppStore } from '@renderer/store/appStore'
@@ -39,7 +47,10 @@ export default function App() {
   const sourceMode = useAppStore((s) => s.sourceMode)
   const activeId = useAppStore((s) => s.activeId)
   const pdfPath = useAppStore((s) => s.pdfPath)
+  const pdfEpoch = useAppStore((s) => s.pdfEpoch)
   const pdfWidth = useAppStore((s) => s.pdfWidth)
+  const texLog = useAppStore((s) => s.texLog)
+  const texCompiling = useAppStore((s) => s.texCompiling)
   const setContent = useAppStore((s) => s.setContent)
   const setToast = useAppStore((s) => s.setToast)
   const saveTimer = useRef<number | null>(null)
@@ -100,7 +111,7 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return
-    const timer = window.setTimeout(() => setToast(null), 2200)
+    const timer = window.setTimeout(() => setToast(null), toast.length > 18 ? 5600 : 2200)
     return () => window.clearTimeout(timer)
   }, [toast, setToast])
 
@@ -151,6 +162,18 @@ export default function App() {
         return
       }
       if (event.key !== 'Escape') return
+      if (store.contextMenu) {
+        store.setContextMenu(null)
+        return
+      }
+      if (store.texPathOpen) {
+        store.setTexPathOpen(false)
+        return
+      }
+      if (store.prompt) {
+        store.setPrompt(null)
+        return
+      }
       if (store.quickOpen) {
         store.setQuickOpen(false)
         return
@@ -185,9 +208,23 @@ export default function App() {
     return () => document.removeEventListener('selectionchange', onSelect)
   }, [])
 
+  useEffect(() => {
+    const onWheel = (event: WheelEvent): void => {
+      if (!event.ctrlKey && !event.metaKey) return
+      const target = event.target
+      if (target instanceof Element && target.closest('.pdf-pane')) return
+      event.preventDefault()
+    }
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true })
+    return () => window.removeEventListener('wheel', onWheel, { capture: true })
+  }, [])
+
+  const texDoc = isTexFile(currentFile ?? '')
+  const texMain = isTexSource(currentFile ?? '')
+
   return (
     <div
-      className={`app ${typewriter ? 'typewriter' : ''} ${sourceMode ? 'source-mode' : ''}`}
+      className={`app ${typewriter ? 'typewriter' : ''} ${sourceMode ? 'source-mode' : ''} ${texDoc ? 'tex-doc' : ''}`}
     >
       <header className="chrome">
         <div className="brand">
@@ -213,14 +250,26 @@ export default function App() {
           >
             PDF
           </button>
-          <button
-            className={`icon-btn ${sourceMode ? 'active' : ''}`}
-            type="button"
-            title="源码对照 Ctrl+/"
-            onClick={() => useAppStore.getState().toggleSource()}
-          >
-            源码
-          </button>
+          {texMain ? (
+            <button
+              className={`icon-btn ${texCompiling ? 'active' : ''}`}
+              type="button"
+              title="用 TeX Live 编译 Ctrl+Enter"
+              disabled={texCompiling}
+              onClick={() => void compileCurrentTex()}
+            >
+              {texCompiling ? '编译中' : '编译'}
+            </button>
+          ) : (
+            <button
+              className={`icon-btn ${sourceMode ? 'active' : ''}`}
+              type="button"
+              title="源码对照 Ctrl+/"
+              onClick={() => useAppStore.getState().toggleSource()}
+            >
+              源码
+            </button>
+          )}
           <button
             className={`icon-btn ${sidebarOpen ? 'active' : ''}`}
             type="button"
@@ -245,30 +294,39 @@ export default function App() {
         {sidebarOpen && <FileTree />}
         <div className={`stage-split ${pdfPath ? 'has-pdf' : ''}`}>
           <main
-            className={`paper-stage ${sourceMode ? 'is-split' : ''}`}
+            className={`paper-stage ${sourceMode || texDoc ? 'is-split' : ''} ${texDoc ? 'is-tex' : ''}`}
             onPointerDown={() => setPdfPaneActive(false)}
           >
-            {sourceMode ? (
-              <div className="source-pane">
+            {texDoc ? (
+              <div className="source-pane tex-source">
                 <SourceEditor />
+                {texLog ? <pre className="tex-log">{texLog}</pre> : null}
               </div>
-            ) : null}
-            <div className="preview-pane">
-              <div className="paper-sheet">
-                <MilkdownEditor
-                  key={activeId}
-                  fileKey={`${activeId}:${editorEpoch}`}
-                  tabId={activeId}
-                  markdown={content}
-                  theme={theme}
-                  currentFile={currentFile}
-                  onChange={setContent}
-                  sourceMode={sourceMode}
-                />
-              </div>
-            </div>
+            ) : (
+              <>
+                {sourceMode ? (
+                  <div className="source-pane">
+                    <SourceEditor />
+                  </div>
+                ) : null}
+                <div className="preview-pane">
+                  <div className="paper-sheet">
+                    <MilkdownEditor
+                      key={activeId}
+                      fileKey={`${activeId}:${editorEpoch}`}
+                      tabId={activeId}
+                      markdown={content}
+                      theme={theme}
+                      currentFile={currentFile}
+                      onChange={setContent}
+                      sourceMode={sourceMode}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </main>
-          {pdfPath ? <PdfViewer path={pdfPath} width={pdfWidth} /> : null}
+          {pdfPath ? <PdfViewer path={pdfPath} width={pdfWidth} epoch={pdfEpoch} /> : null}
         </div>
         {outlineOpen && <Outline onJump={jumpToHeading} />}
       </div>
@@ -277,6 +335,7 @@ export default function App() {
       <SearchPanel onFind={findInEditor} />
       <QuickOpen />
       <PromptDialog />
+      <TexPathDialog />
       <FileContextMenu />
       {toast && <div className="toast">{toast}</div>}
     </div>
@@ -294,6 +353,15 @@ async function handleMenu(command: MenuCommand): Promise<void> {
       break
     case 'open-pdf':
       await pickPdfFile()
+      break
+    case 'tex-import':
+      await importConferenceTemplate()
+      break
+    case 'tex-compile':
+      await compileCurrentTex()
+      break
+    case 'tex-path':
+      useAppStore.getState().setTexPathOpen(true)
       break
     case 'new-file':
       await store.newUntitled()
@@ -452,6 +520,14 @@ const FORMAT_COMMANDS: Record<
 async function exportCurrent(kind: 'html' | 'pdf'): Promise<void> {
   const store = useAppStore.getState()
   store.snapshotActive()
+  if (isTexSource(store.currentFile ?? '')) {
+    if (kind === 'html') {
+      store.setToast('LaTeX 请用「文件 → 导出 PDF」')
+      return
+    }
+    await exportCurrentTexPdf()
+    return
+  }
   const markdown = readDocumentMarkdown() ?? store.activeMarkdown()
   const currentFile = store.currentFile
   const theme = store.theme

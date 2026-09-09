@@ -1,16 +1,71 @@
 import { useMemo, useState, type MouseEvent } from 'react'
-import type { FileNode } from '@shared/types'
+import type { FileNode, WorkspaceKind } from '@shared/types'
+import { isPdfFile } from '@shared/types'
+import { pickPdfFile } from '@renderer/lib/openLocal'
+import { countFiles, filterTreeByKind } from '@renderer/lib/files'
+import { importConferenceTemplate } from '@renderer/lib/tex'
 import { useAppStore } from '@renderer/store/appStore'
+
+const KIND_KEY = 'zhijian.workspaceKind'
+
+const KINDS: { id: WorkspaceKind; label: string; empty: string }[] = [
+  { id: 'md', label: 'Markdown', empty: '还没有 Markdown。点下方新建，或把 .md 放进这个文件夹。' },
+  { id: 'tex', label: 'LaTeX', empty: '还没有 LaTeX 文稿。可以导入会议模板，或新建 .tex。' },
+  { id: 'pdf', label: 'PDF', empty: '还没有 PDF。编译论文后会出现在这里，也可以直接打开。' }
+]
+
+function readKind(): WorkspaceKind {
+  try {
+    const value = localStorage.getItem(KIND_KEY)
+    if (value === 'md' || value === 'tex' || value === 'pdf') return value
+  } catch {
+    /* ignore */
+  }
+  return 'md'
+}
+
+function persistKind(kind: WorkspaceKind): void {
+  try {
+    localStorage.setItem(KIND_KEY, kind)
+  } catch {
+    /* ignore */
+  }
+}
 
 export function FileTree() {
   const workspacePath = useAppStore((s) => s.workspacePath)
   const fileTree = useAppStore((s) => s.fileTree)
   const currentFile = useAppStore((s) => s.currentFile)
+  const pdfPath = useAppStore((s) => s.pdfPath)
   const openWorkspace = useAppStore((s) => s.openWorkspace)
   const openFilePath = useAppStore((s) => s.openFilePath)
+  const openPdf = useAppStore((s) => s.openPdf)
   const setContextMenu = useAppStore((s) => s.setContextMenu)
   const setPrompt = useAppStore((s) => s.setPrompt)
   const createFile = useAppStore((s) => s.createFile)
+  const [kind, setKind] = useState<WorkspaceKind>(readKind)
+
+  const trees = useMemo(
+    () => ({
+      md: filterTreeByKind(fileTree, 'md'),
+      tex: filterTreeByKind(fileTree, 'tex'),
+      pdf: filterTreeByKind(fileTree, 'pdf')
+    }),
+    [fileTree]
+  )
+  const visible = trees[kind]
+  const meta = KINDS.find((item) => item.id === kind) ?? KINDS[0]
+  const activePath = kind === 'pdf' ? pdfPath : currentFile
+
+  const switchKind = (next: WorkspaceKind): void => {
+    setKind(next)
+    persistKind(next)
+  }
+
+  const openNode = (path: string): void => {
+    if (isPdfFile(path)) openPdf(path)
+    else void openFilePath(path)
+  }
 
   return (
     <aside className="sidebar">
@@ -21,9 +76,24 @@ export function FileTree() {
             打开
           </button>
         </div>
+        <div className="workspace-kinds" role="tablist" aria-label="工作区类型">
+          {KINDS.map((item) => (
+            <button
+              key={item.id}
+              className={`workspace-kind ${kind === item.id ? 'active' : ''}`}
+              type="button"
+              role="tab"
+              aria-selected={kind === item.id}
+              onClick={() => switchKind(item.id)}
+            >
+              {item.label}
+              {workspacePath ? <em>{countFiles(trees[item.id])}</em> : null}
+            </button>
+          ))}
+        </div>
         {!workspacePath ? (
           <div className="empty-hint">
-            打开一个本地文件夹，纸间会列出其中的 Markdown 文稿。右键可以新建、重命名或删除。
+            打开一个本地文件夹。Markdown、LaTeX 和 PDF 会分开放在三个工作区里，点文件即可打开。
           </div>
         ) : (
           <div
@@ -36,41 +106,85 @@ export function FileTree() {
                   name: workspacePath,
                   path: workspacePath,
                   type: 'directory',
-                  children: fileTree
+                  children: visible
                 }
               })
             }}
           >
-            {fileTree.map((node) => (
-              <TreeNode
-                key={node.path}
-                node={node}
-                depth={0}
-                currentFile={currentFile}
-                onOpen={openFilePath}
-                onMenu={(event, target) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  setContextMenu({ x: event.clientX, y: event.clientY, node: target })
-                }}
-              />
-            ))}
-            <button
-              className="tree-item"
-              type="button"
-              style={{ paddingLeft: 10 }}
-              onClick={() =>
-                setPrompt({
-                  title: '新建文稿',
-                  label: '文件名',
-                  value: '未命名.md',
-                  confirmText: '创建',
-                  onSubmit: (name) => createFile(workspacePath, name)
-                })
-              }
-            >
-              + 新建文稿
-            </button>
+            {visible.length === 0 ? (
+              <div className="empty-hint">{meta.empty}</div>
+            ) : (
+              visible.map((node) => (
+                <TreeNode
+                  key={node.path}
+                  node={node}
+                  depth={0}
+                  activePath={activePath}
+                  onOpen={openNode}
+                  onMenu={(event, target) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setContextMenu({ x: event.clientX, y: event.clientY, node: target })
+                  }}
+                />
+              ))
+            )}
+            {kind === 'md' ? (
+              <button
+                className="tree-item"
+                type="button"
+                style={{ paddingLeft: 10 }}
+                onClick={() =>
+                  setPrompt({
+                    title: '新建 Markdown',
+                    label: '文件名',
+                    value: '未命名.md',
+                    confirmText: '创建',
+                    onSubmit: (name) => createFile(workspacePath, name)
+                  })
+                }
+              >
+                + 新建文稿
+              </button>
+            ) : null}
+            {kind === 'tex' ? (
+              <>
+                <button
+                  className="tree-item"
+                  type="button"
+                  style={{ paddingLeft: 10 }}
+                  onClick={() => void importConferenceTemplate()}
+                >
+                  + 导入 LaTeX 模板
+                </button>
+                <button
+                  className="tree-item"
+                  type="button"
+                  style={{ paddingLeft: 10 }}
+                  onClick={() =>
+                    setPrompt({
+                      title: '新建 LaTeX',
+                      label: '文件名',
+                      value: 'main.tex',
+                      confirmText: '创建',
+                      onSubmit: (name) => createFile(workspacePath, name)
+                    })
+                  }
+                >
+                  + 新建 .tex
+                </button>
+              </>
+            ) : null}
+            {kind === 'pdf' ? (
+              <button
+                className="tree-item"
+                type="button"
+                style={{ paddingLeft: 10 }}
+                onClick={() => void pickPdfFile()}
+              >
+                + 打开 PDF
+              </button>
+            ) : null}
           </div>
         )}
       </div>
@@ -81,14 +195,14 @@ export function FileTree() {
 function TreeNode({
   node,
   depth,
-  currentFile,
+  activePath,
   onOpen,
   onMenu
 }: {
   node: FileNode
   depth: number
-  currentFile: string | null
-  onOpen: (path: string) => Promise<void>
+  activePath: string | null
+  onOpen: (path: string) => void
   onMenu: (event: MouseEvent, node: FileNode) => void
 }) {
   const [open, setOpen] = useState(true)
@@ -115,7 +229,7 @@ function TreeNode({
                 key={child.path}
                 node={child}
                 depth={depth + 1}
-                currentFile={currentFile}
+                activePath={activePath}
                 onOpen={onOpen}
                 onMenu={onMenu}
               />
@@ -128,10 +242,10 @@ function TreeNode({
 
   return (
     <button
-      className={`tree-item ${currentFile === node.path ? 'active' : ''}`}
+      className={`tree-item ${activePath === node.path ? 'active' : ''}`}
       type="button"
       style={pad}
-      onClick={() => void onOpen(node.path)}
+      onClick={() => onOpen(node.path)}
       onContextMenu={(event) => onMenu(event, node)}
     >
       <span className="caret">·</span>
@@ -173,7 +287,31 @@ export function FileContextMenu() {
             })
           }}
         >
-          新建文件
+          新建 Markdown
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setContextMenu(null)
+            setPrompt({
+              title: '新建 LaTeX',
+              label: '文件名',
+              value: 'main.tex',
+              confirmText: '创建',
+              onSubmit: (name) => createFile(dir, name)
+            })
+          }}
+        >
+          新建 LaTeX
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setContextMenu(null)
+            void importConferenceTemplate()
+          }}
+        >
+          导入 LaTeX 模板
         </button>
         <button
           type="button"

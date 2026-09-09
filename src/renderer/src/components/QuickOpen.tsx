@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { isPdfFile } from '@shared/types'
 import { filterQuickItems, flattenFiles, type QuickItem } from '@renderer/lib/files'
 import { useAppStore } from '@renderer/store/appStore'
 
@@ -9,6 +10,7 @@ export function QuickOpen() {
   const currentFile = useAppStore((s) => s.currentFile)
   const setQuickOpen = useAppStore((s) => s.setQuickOpen)
   const openFilePath = useAppStore((s) => s.openFilePath)
+  const openPdf = useAppStore((s) => s.openPdf)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
 
@@ -36,6 +38,11 @@ export function QuickOpen() {
   if (!open) return null
 
   const choose = (path: string): void => {
+    if (isPdfFile(path)) {
+      openPdf(path)
+      setQuickOpen(false)
+      return
+    }
     void openFilePath(path)
   }
 

@@ -68,11 +68,34 @@ const api = {
   ): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:open', target, baseFile, key),
   readBinary: (filePath: string): Promise<Uint8Array> => ipcRenderer.invoke('fs:readBinary', filePath),
+  copyFile: (src: string, dest: string): Promise<void> => ipcRenderer.invoke('fs:copyFile', src, dest),
   findPdf: (
     target: string,
     baseFile?: string | null,
     key?: string
-  ): Promise<ResolveResult> => ipcRenderer.invoke('fs:findPdf', target, baseFile, key)
+  ): Promise<ResolveResult> => ipcRenderer.invoke('fs:findPdf', target, baseFile, key),
+  compileTex: (
+    texPath: string
+  ): Promise<
+    | { ok: true; pdfPath: string; log: string }
+    | { ok: false; error: string; log: string; pdfPath?: string }
+  > => ipcRenderer.invoke('tex:compile', texPath),
+  pickTexTemplate: (): Promise<string | null> => ipcRenderer.invoke('dialog:texTemplate'),
+  importTexTemplate: (
+    workspace: string,
+    source: string
+  ): Promise<{ ok: true; texPath: string } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('tex:import', workspace, source),
+  getTexPath: (): Promise<{ path: string; latexmk: string | null; detected: string | null }> =>
+    ipcRenderer.invoke('tex:getPath'),
+  setTexPath: (
+    binPath: string
+  ): Promise<
+    | { ok: true; info: { path: string; latexmk: string | null; detected: string | null } }
+    | { ok: false; error: string }
+  > => ipcRenderer.invoke('tex:setPath', binPath),
+  pickTexBin: (defaultPath?: string): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:texBin', defaultPath)
 }
 
 export type InkApi = typeof api

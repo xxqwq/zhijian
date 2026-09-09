@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { FileNode, ThemeName } from '@shared/types'
+import { isTexFile } from '@shared/types'
 import { WELCOME_MARKDOWN } from '@renderer/lib/welcome'
 import { countWords } from '@renderer/lib/markdown'
 import { nextTheme, persistTheme, readStoredTheme } from '@renderer/lib/themes'
@@ -46,8 +47,12 @@ interface AppState {
   tabs: OpenTab[]
   activeId: string
   pdfPath: string | null
+  pdfEpoch: number
   pdfWidth: number | null
   pdfDismissed: Record<string, true>
+  texLog: string
+  texCompiling: boolean
+  texPathOpen: boolean
 
   dirty: () => boolean
   setTheme: (theme: ThemeName) => void
@@ -76,6 +81,9 @@ interface AppState {
   closePdf: () => void
   dismissPdf: () => void
   setPdfWidth: (width: number) => void
+  setTexLog: (log: string) => void
+  setTexCompiling: (value: boolean) => void
+  setTexPathOpen: (open: boolean) => void
   refreshTree: () => Promise<void>
   confirmIfDirty: (tab?: OpenTab) => Promise<boolean>
   openWorkspace: (dir?: string | null) => Promise<void>
@@ -144,8 +152,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   tabs: [initial],
   activeId: initial.id,
   pdfPath: null,
+  pdfEpoch: 0,
   pdfWidth: readPdfWidth(),
   pdfDismissed: {},
+  texLog: '',
+  texCompiling: false,
+  texPathOpen: false,
 
   dirty: () => get().tabs.some(isTabDirty),
 
@@ -177,6 +189,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleTypewriter: () => set({ typewriter: !get().typewriter }),
 
   toggleSource: () => {
+    if (isTexFile(get().currentFile ?? '')) return
     const next = !get().sourceMode
     const { activeId, tabs } = get()
     set({
@@ -305,7 +318,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const currentFile = get().currentFile
     const pdfDismissed = { ...get().pdfDismissed }
     if (currentFile) delete pdfDismissed[currentFile]
-    set({ pdfPath, pdfDismissed })
+    set({ pdfPath, pdfEpoch: get().pdfEpoch + 1, pdfDismissed })
     get().persistSession()
   },
   closePdf: () => {
@@ -329,6 +342,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       /* ignore */
     }
   },
+  setTexLog: (texLog) => set({ texLog }),
+  setTexCompiling: (texCompiling) => set({ texCompiling }),
+  setTexPathOpen: (texPathOpen) => set({ texPathOpen }),
 
   restoreSession: async () => {
     if (!window.ink?.pathExists) return
@@ -355,7 +371,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             path: item.path,
             content,
             savedContent: content,
-            scrollTop: item.scrollTop ?? 0
+            scrollTop: item.scrollTop ?? 0,
+            sourceMode: isTexFile(item.path)
           })
         )
       }
@@ -369,7 +386,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         content: active.content,
         savedContent: active.savedContent,
         wordCount: countWords(active.content),
-        sourceMode: false,
+        sourceMode: active.sourceMode,
         editorEpoch: get().editorEpoch + 1,
         recentFiles: session.recent
       })
@@ -416,6 +433,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const existing = get().tabs.find((tab) => tab.path === filePath)
     if (existing) {
       get().activateTab(existing.id)
+      if (isTexFile(filePath) && !get().sourceMode) set({ sourceMode: true })
       return
     }
     const content = await window.ink.readFile(filePath)
@@ -427,7 +445,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: filePath,
       path: filePath,
       content,
-      savedContent: content
+      savedContent: content,
+      sourceMode: isTexFile(filePath)
     })
     let tabs = get().tabs
     const loneWelcome =
@@ -457,7 +476,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       wordCount: countWords(content),
       workspacePath,
       editorEpoch: get().editorEpoch + 1,
-      sourceMode: false,
+      sourceMode: isTexFile(filePath),
       quickOpen: false,
       selectionCount: 0,
       recentFiles: pushRecent(get().recentFiles, filePath)

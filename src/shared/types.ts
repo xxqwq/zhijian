@@ -63,5 +63,62 @@ export type MenuCommand =
   | 'format-task'
   | 'format-quote'
   | 'format-code-block'
+  | 'tex-compile'
+  | 'tex-import'
+  | 'tex-path'
 
-export const TEXT_EXTENSIONS = ['.md', '.markdown', '.txt'] as const
+export const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.txt'] as const
+export const TEX_EXTENSIONS = ['.tex', '.bib', '.sty', '.cls'] as const
+export const TEXT_EXTENSIONS = [...MARKDOWN_EXTENSIONS, ...TEX_EXTENSIONS] as const
+export const TEX_AUX_EXTENSIONS = [
+  '.aux',
+  '.bbl',
+  '.blg',
+  '.fdb_latexmk',
+  '.fls',
+  '.log',
+  '.lof',
+  '.lot',
+  '.nav',
+  '.out',
+  '.snm',
+  '.synctex.gz',
+  '.toc',
+  '.vrb'
+] as const
+
+export function fileExt(name: string): string {
+  const base = name.split(/[/\\]/).pop() ?? name
+  const index = base.lastIndexOf('.')
+  return index >= 0 ? base.slice(index).toLowerCase() : ''
+}
+
+export function isMarkdownFile(name: string): boolean {
+  return (MARKDOWN_EXTENSIONS as readonly string[]).includes(fileExt(name))
+}
+
+export function isTexFile(name: string): boolean {
+  return (TEX_EXTENSIONS as readonly string[]).includes(fileExt(name))
+}
+
+export function isTexSource(name: string): boolean {
+  return fileExt(name) === '.tex'
+}
+
+export function isTexAuxFile(name: string): boolean {
+  const lower = name.toLowerCase()
+  return (TEX_AUX_EXTENSIONS as readonly string[]).some((ext) => lower.endsWith(ext))
+}
+
+export function isPdfFile(name: string): boolean {
+  return fileExt(name) === '.pdf'
+}
+
+export type WorkspaceKind = 'md' | 'tex' | 'pdf'
+
+export function fileWorkspaceKind(name: string): WorkspaceKind | null {
+  if (isPdfFile(name)) return 'pdf'
+  if (isTexFile(name)) return 'tex'
+  if (isMarkdownFile(name)) return 'md'
+  return null
+}

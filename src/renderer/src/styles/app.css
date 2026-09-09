@@ -149,6 +149,7 @@ html,
 body,
 #root {
   margin: 0;
+  width: 100%;
   height: 100%;
   overflow: hidden;
 }
@@ -173,6 +174,7 @@ button {
 }
 
 .app {
+  width: 100%;
   height: 100%;
   display: grid;
   grid-template-rows: 46px 36px 1fr 28px;
@@ -475,6 +477,40 @@ button {
   letter-spacing: 0.18em;
 }
 
+.workspace-kinds {
+  display: flex;
+  gap: 4px;
+  padding: 0 4px 12px;
+}
+
+.workspace-kind {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-soft);
+  border-radius: 8px;
+  padding: 5px 4px;
+  font-size: 11px;
+}
+
+.workspace-kind:hover,
+.workspace-kind.active {
+  background: var(--accent-soft);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.workspace-kind em {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .tree-item,
 .outline-item {
   box-sizing: border-box;
@@ -594,6 +630,125 @@ button {
   padding: 28px 24px 64px;
 }
 
+.paper-stage.is-tex {
+  background: var(--bg-paper);
+  isolation: isolate;
+}
+
+.paper-stage.is-tex.is-split .source-pane {
+  flex: 1 1 auto;
+  width: 100%;
+  border-right: 0;
+  background: var(--bg-paper);
+}
+
+.tex-source {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
+}
+
+.tex-source .source-editor-wrap {
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tex-source .source-editor-backdrop,
+.tex-source .source-editor-wrap > .source-editor {
+  margin: 0;
+  padding: 16px 22px 28px;
+  box-sizing: border-box;
+  border: 0;
+  font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  font-size: 15px;
+  font-weight: 400;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  tab-size: 4;
+  overflow: auto;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
+}
+
+.tex-source .source-editor-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none !important;
+  user-select: none;
+  color: var(--ink);
+  background: transparent;
+}
+
+.tex-source .source-editor-wrap > .source-editor {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  color: transparent;
+  background: transparent;
+  caret-color: var(--ink);
+}
+
+.tex-source .source-editor-wrap > .source-editor::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: transparent;
+}
+
+.tex-slot {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  background: color-mix(in srgb, #d6a24a 40%, transparent);
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.tex-slot.is-mark {
+  background: color-mix(in srgb, #c45c26 36%, transparent);
+}
+
+.tex-source .source-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.tex-log {
+  flex: 0 0 auto;
+  max-height: 30%;
+  margin: 0;
+  padding: 8px 12px 10px;
+  overflow: auto;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-paper));
+  border-top: 1px solid var(--line);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .split-scroll-probe {
   position: absolute;
   left: 0;
@@ -659,7 +814,8 @@ button {
   padding: 8px 28px 28px !important;
 }
 
-.stage-split.has-pdf .source-editor {
+.stage-split.has-pdf .source-editor-wrap > .source-editor,
+.stage-split.has-pdf .source-editor-backdrop {
   min-height: 0;
   padding: 16px 20px 40px;
 }
@@ -677,6 +833,7 @@ button {
 
 .pdf-pane.is-fixed {
   flex: 0 0 auto;
+  max-width: min(72%, 1600px);
 }
 
 .pdf-resizer {
@@ -866,11 +1023,11 @@ button {
 }
 
 .wysiwyg {
-  min-height: calc(100vh - 140px);
+  min-height: calc(100% - 48px);
 }
 
 .editor-root {
-  min-height: calc(100vh - 140px);
+  min-height: calc(100% - 48px);
   padding: 28px 8px 80px;
 }
 
@@ -1245,6 +1402,29 @@ button {
   font-size: 18px;
 }
 
+.dialog-hint,
+.dialog-error {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.dialog-hint {
+  color: var(--muted);
+}
+
+.dialog-error {
+  color: #b42318;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .search-row {
   display: flex;
   gap: 8px;
@@ -1323,6 +1503,7 @@ button {
   position: fixed;
   inset: 0;
   z-index: 25;
+  background: transparent;
 }
 
 .context-menu {
@@ -1399,7 +1580,7 @@ button {
 .source-editor {
   display: block;
   width: 100%;
-  min-height: calc(100vh - 140px);
+  min-height: 100%;
   border: 0;
   resize: none;
   padding: 40px 56px 80px;
@@ -1418,6 +1599,14 @@ button {
 }
 
 .app.typewriter.source-mode .source-editor {
+  padding-top: 28px;
+  padding-bottom: 64px;
+}
+
+.app.tex-doc.typewriter .tex-source .source-editor-backdrop,
+.app.tex-doc.typewriter .tex-source .source-editor-wrap > .source-editor,
+.app.tex-doc.typewriter.source-mode .tex-source .source-editor-backdrop,
+.app.tex-doc.typewriter.source-mode .tex-source .source-editor-wrap > .source-editor {
   padding-top: 28px;
   padding-bottom: 64px;
 }

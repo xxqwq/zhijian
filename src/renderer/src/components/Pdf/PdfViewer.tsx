@@ -9,9 +9,10 @@ import { useAppStore } from '@renderer/store/appStore'
 interface Props {
   path: string
   width: number | null
+  epoch?: number
 }
 
-export function PdfViewer({ path, width }: Props) {
+export function PdfViewer({ path, width, epoch = 0 }: Props) {
   const dismissPdf = useAppStore((s) => s.dismissPdf)
   const setPdfWidth = useAppStore((s) => s.setPdfWidth)
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
@@ -70,23 +71,32 @@ export function PdfViewer({ path, width }: Props) {
       cancelled = true
       void loadingTask?.destroy()
     }
-  }, [path])
+  }, [path, epoch])
 
   const applyFit = useCallback(() => {
     const scroll = scrollRef.current
     if (!scroll) return
     const next = Math.max(0.5, Math.min(2.4, (scroll.clientWidth - 28) / pageWidthRef.current))
-    setScale(Number(next.toFixed(2)))
+    const rounded = Number(next.toFixed(2))
+    setScale((prev) => (Math.abs(prev - rounded) < 0.02 ? prev : rounded))
   }, [])
 
   useEffect(() => {
     if (!fit || !pdf) return
-    applyFit()
     const scroll = scrollRef.current
     if (!scroll) return
-    const observer = new ResizeObserver(() => applyFit())
+    let raf = 0
+    const onResize = (): void => {
+      window.cancelAnimationFrame(raf)
+      raf = window.requestAnimationFrame(() => applyFit())
+    }
+    applyFit()
+    const observer = new ResizeObserver(onResize)
     observer.observe(scroll)
-    return () => observer.disconnect()
+    return () => {
+      window.cancelAnimationFrame(raf)
+      observer.disconnect()
+    }
   }, [applyFit, fit, pdf, width])
 
   useEffect(() => {
@@ -292,7 +302,7 @@ export function PdfViewer({ path, width }: Props) {
         {pdf
           ? Array.from({ length: pageCount }, (_, index) => (
               <PdfPage
-                key={`${path}-${index + 1}-${scale}`}
+                key={`${path}-${index + 1}`}
                 pdf={pdf}
                 pageNumber={index + 1}
                 scale={scale}

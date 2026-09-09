@@ -1,4 +1,7 @@
-import type { FileNode } from '@shared/types'
+import type { FileNode, WorkspaceKind } from '@shared/types'
+import { fileWorkspaceKind } from '@shared/types'
+
+export type { WorkspaceKind }
 
 export interface QuickItem {
   path: string
@@ -19,6 +22,23 @@ export function flattenFiles(nodes: FileNode[]): QuickItem[] {
   }
   walk(nodes)
   return items
+}
+
+export function filterTreeByKind(nodes: FileNode[], kind: WorkspaceKind): FileNode[] {
+  const next: FileNode[] = []
+  for (const node of nodes) {
+    if (node.type === 'directory') {
+      const children = filterTreeByKind(node.children ?? [], kind)
+      if (children.length) next.push({ ...node, children })
+    } else if (fileWorkspaceKind(node.path) === kind) {
+      next.push(node)
+    }
+  }
+  return next
+}
+
+export function countFiles(nodes: FileNode[]): number {
+  return flattenFiles(nodes).length
 }
 
 export function filterQuickItems(items: QuickItem[], query: string): QuickItem[] {

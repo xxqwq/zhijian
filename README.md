@@ -1,6 +1,6 @@
 # 纸间
 
-类 Typora 的本地 Markdown 桌面编辑器：所见即所得、工作区文件树、大纲、查找、公式与 Mermaid、导出 HTML/PDF。
+类 Typora 的本地 Markdown 桌面编辑器：所见即所得、工作区文件树、大纲、查找、公式与 Mermaid、LaTeX 编译、导出 HTML/PDF。
 
 ## 运行
 
@@ -19,19 +19,20 @@ npm run dev
 - `Ctrl+F` 查找当前文稿
 - `Ctrl+Shift+F` 搜索工作区
 - `Ctrl+\` 显示/隐藏侧边栏
+- `Ctrl+Enter` 编译当前 `.tex` 文件（需本机已装 TeX Live / MiKTeX）
 
 ## 下载
 
 国内网络不要直接点 GitHub 的 Assets，会跳到 `release-assets.githubusercontent.com` 并断开。请用加速地址：
 
-- 推荐：https://gh-proxy.com/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.5.exe
-- 备用：https://ghproxy.net/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.5.exe
+- 推荐：https://gh-proxy.com/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.6.exe
+- 备用：https://ghproxy.net/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.6.exe
 
 装好后可用 **帮助 → 检查更新**，或 **帮助 → 国内下载安装包**。
 
 ## 打包
 
-**一键打包（推荐）：** 双击项目根目录的 `打包.bat`。首次会自动安装依赖，完成后会打开 `release` 文件夹，安装包名为 `zhijian-setup-0.1.5.exe`。
+**一键打包（推荐）：** 双击项目根目录的 `打包.bat`。首次会自动安装依赖，完成后会打开 `release` 文件夹，安装包名为 `zhijian-setup-0.1.6.exe`。
 
 也可以在终端执行：
 
