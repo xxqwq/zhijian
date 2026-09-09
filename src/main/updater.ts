@@ -83,13 +83,11 @@ export function setupUpdater(getter: WindowGetter): void {
   applyFeed(UPDATE_FEEDS[0])
 
   autoUpdater.on('update-available', (info) => {
-    if (manualCheck) {
-      void box({
-        type: 'info',
-        message: `发现新版本 ${info.version}`,
-        detail: '正在后台下载，完成后会提示重启。'
-      })
-    }
+    void box({
+      type: 'info',
+      message: `发现新版本 ${info.version}`,
+      detail: '正在后台下载，完成后会提示重启。'
+    })
   })
 
   autoUpdater.on('update-not-available', () => {
@@ -128,5 +126,5 @@ export function setupUpdater(getter: WindowGetter): void {
     })
   })
 
-  setTimeout(() => checkForAppUpdates(false), 8000)
+  setTimeout(() => checkForAppUpdates(false), 2000)
 }
