@@ -25,8 +25,8 @@ npm run dev
 
 国内网络不要直接点 GitHub 的 Assets，会跳到 `release-assets.githubusercontent.com` 并断开。请用加速地址：
 
-- 推荐：https://gh-proxy.com/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.6.exe
-- 备用：https://ghproxy.net/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.6.exe
+- 推荐：https://gh-proxy.com/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.8.exe
+- 备用：https://ghproxy.net/https://github.com/xxqwq/zhijian/releases/latest/download/zhijian-setup-0.1.8.exe
 
 装好后可用 **帮助 → 检查更新**，或 **帮助 → 国内下载安装包**。
 
