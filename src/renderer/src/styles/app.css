@@ -617,20 +617,64 @@ button {
   flex: 1;
 }
 
+.stage-split.has-pdf .paper-stage {
+  flex: 1 1 50%;
+  min-width: 280px;
+}
+
 .stage-split.has-pdf .paper-sheet {
-  max-width: 720px;
-  margin: 16px 18px 24px;
+  max-width: none;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.stage-split.has-pdf .paper-sheet::before {
+  display: none;
+}
+
+.stage-split.has-pdf .wysiwyg,
+.stage-split.has-pdf .editor-root {
+  min-height: 0;
+}
+
+.stage-split.has-pdf .editor-root {
+  padding: 8px 4px 32px;
+}
+
+.stage-split.has-pdf .has-frontmatter .editor-root {
+  padding-top: 0;
+}
+
+.stage-split.has-pdf .frontmatter {
+  margin: 10px 12px 0;
+}
+
+.stage-split.has-pdf .milkdown .editor {
+  padding: 8px 28px 28px !important;
+}
+
+.stage-split.has-pdf .source-editor {
+  min-height: 0;
+  padding: 16px 20px 40px;
 }
 
 .pdf-pane {
   position: relative;
-  flex: 0 0 auto;
+  flex: 1 1 50%;
   display: flex;
   flex-direction: column;
-  min-width: 260px;
-  max-width: 72%;
+  min-width: 280px;
+  max-width: none;
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-paper));
   border-left: 1px solid var(--line);
+}
+
+.pdf-pane.is-fixed {
+  flex: 0 0 auto;
 }
 
 .pdf-resizer {

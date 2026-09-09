@@ -46,7 +46,7 @@ interface AppState {
   tabs: OpenTab[]
   activeId: string
   pdfPath: string | null
-  pdfWidth: number
+  pdfWidth: number | null
   pdfDismissed: Record<string, true>
 
   dirty: () => boolean
@@ -108,14 +108,15 @@ function nextUntitledId(tabs: OpenTab[]): string {
   return `untitled-${index}`
 }
 
-function readPdfWidth(): number {
+function readPdfWidth(): number | null {
   try {
     const n = Number(localStorage.getItem('zhijian.pdfWidth'))
+    if (n === 520) return null
     if (Number.isFinite(n) && n >= 260 && n <= 1600) return Math.round(n)
   } catch {
     /* ignore */
   }
-  return 520
+  return null
 }
 
 const initial = welcomeTab()

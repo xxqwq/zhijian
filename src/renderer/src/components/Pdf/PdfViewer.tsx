@@ -1,23 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
-import {
-  GlobalWorkerOptions,
-  TextLayer,
-  getDocument,
-  type PDFDocumentProxy,
-  type RenderTask
-} from 'pdfjs-dist'
-import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { getDocument, TextLayer, toPdfBytes, type PDFDocumentProxy, type RenderTask } from '@renderer/lib/pdfjs'
 import { searchPdfDocument, type PdfMatch } from '@renderer/lib/pdfSearch'
 import { readPdfPage, writePdfPage } from '@renderer/lib/pdfPages'
 import { onPdfFindRequest, setPdfPaneActive } from '@renderer/lib/pdfUi'
 import { pickPdfFile } from '@renderer/lib/openLocal'
 import { useAppStore } from '@renderer/store/appStore'
 
-GlobalWorkerOptions.workerSrc = pdfWorker
-
 interface Props {
   path: string
-  width: number
+  width: number | null
 }
 
 export function PdfViewer({ path, width }: Props) {
@@ -176,8 +167,8 @@ export function PdfViewer({ path, width }: Props) {
 
   return (
     <aside
-      className="pdf-pane"
-      style={{ width }}
+      className={`pdf-pane ${width ? 'is-fixed' : ''}`}
+      style={width ? { width } : undefined}
       aria-label="PDF 阅读器"
       onPointerDown={() => setPdfPaneActive(true)}
       onCopy={(event) => {
@@ -191,7 +182,8 @@ export function PdfViewer({ path, width }: Props) {
         className="pdf-resizer"
         onMouseDown={(event) => {
           event.preventDefault()
-          dragRef.current = { startX: event.clientX, startWidth: width }
+          const pane = (event.currentTarget.parentElement as HTMLElement | null)?.offsetWidth
+          dragRef.current = { startX: event.clientX, startWidth: width ?? pane ?? 520 }
           document.body.style.cursor = 'col-resize'
           document.body.style.userSelect = 'none'
         }}
@@ -371,18 +363,6 @@ export function PdfViewer({ path, width }: Props) {
     setFindStatus('')
     setMatchIndex((index) => (index + direction + nextMatches.length) % nextMatches.length)
   }
-}
-
-function toPdfBytes(raw: unknown): Uint8Array {
-  if (raw instanceof Uint8Array) return raw.slice()
-  if (raw instanceof ArrayBuffer) return new Uint8Array(raw)
-  if (ArrayBuffer.isView(raw)) {
-    return new Uint8Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength))
-  }
-  if (raw && typeof raw === 'object' && 'data' in raw && Array.isArray((raw as { data: unknown }).data)) {
-    return Uint8Array.from((raw as { data: number[] }).data)
-  }
-  throw new Error('无法读取 PDF 数据')
 }
 
 function PdfPage({

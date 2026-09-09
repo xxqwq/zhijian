@@ -26,7 +26,7 @@ export default defineConfig({
       format: 'es'
     },
     optimizeDeps: {
-      include: ['pdfjs-dist']
+      include: ['pdfjs-dist', 'pdfjs-dist/legacy/build/pdf.mjs']
     },
     plugins: [react()]
   }
