@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { FileNode, ThemeName } from '@shared/types'
-import { isTexFile } from '@shared/types'
+import { isTexFile, isTexSource } from '@shared/types'
 import { WELCOME_MARKDOWN } from '@renderer/lib/welcome'
 import { countWords } from '@renderer/lib/markdown'
 import { nextTheme, persistTheme, readStoredTheme } from '@renderer/lib/themes'
@@ -53,6 +53,9 @@ interface AppState {
   texLog: string
   texCompiling: boolean
   texPathOpen: boolean
+  mainTexPath: string | null
+  reveal: { path: string; line: number; nonce: number } | null
+  pdfSync: { page: number; y?: number; nonce: number } | null
 
   dirty: () => boolean
   setTheme: (theme: ThemeName) => void
@@ -77,6 +80,7 @@ interface AppState {
   cycleTab: (direction: 1 | -1) => void
   persistSession: () => void
   restoreSession: () => Promise<void>
+  reloadFromDisk: (filePath: string, content: string) => void
   openPdf: (path: string) => void
   closePdf: () => void
   dismissPdf: () => void
@@ -84,10 +88,14 @@ interface AppState {
   setTexLog: (log: string) => void
   setTexCompiling: (value: boolean) => void
   setTexPathOpen: (open: boolean) => void
+  setMainTex: (path: string | null, quiet?: boolean) => void
+  revealInEditor: (path: string, line: number) => void
+  clearReveal: () => void
+  setPdfSync: (page: number, y?: number) => void
   refreshTree: () => Promise<void>
   confirmIfDirty: (tab?: OpenTab) => Promise<boolean>
   openWorkspace: (dir?: string | null) => Promise<void>
-  openFilePath: (filePath: string, silent?: boolean) => Promise<void>
+  openFilePath: (filePath: string, opts?: { line?: number }) => Promise<void>
   openFileDialog: () => Promise<void>
   newUntitled: () => Promise<void>
   save: () => Promise<boolean>
@@ -158,6 +166,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   texLog: '',
   texCompiling: false,
   texPathOpen: false,
+  mainTexPath: null,
+  reveal: null,
+  pdfSync: null,
 
   dirty: () => get().tabs.some(isTabDirty),
 
@@ -302,16 +313,38 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   persistSession: () => {
-    const { workspacePath, currentFile, recentFiles, tabs, pdfPath } = get()
+    const { workspacePath, currentFile, recentFiles, tabs, pdfPath, mainTexPath } = get()
     writeSession({
       workspacePath,
       currentFile,
       recent: recentFiles,
       pdfPath,
+      mainTexPath,
       openTabs: tabs
         .filter((tab) => tab.path)
         .map((tab) => ({ path: tab.path as string, scrollTop: tab.scrollTop }))
     })
+  },
+
+  reloadFromDisk: (filePath, content) => {
+    const { tabs, activeId } = get()
+    const tab = tabs.find((item) => item.path === filePath)
+    if (!tab) return
+    set({
+      tabs: tabs.map((item) =>
+        item.id === tab.id ? { ...item, content, savedContent: content } : item
+      ),
+      ...(tab.id === activeId
+        ? {
+            content,
+            savedContent: content,
+            wordCount: countWords(content),
+            editorEpoch: get().editorEpoch + 1
+          }
+        : {})
+    })
+    get().syncWindowTitle()
+    get().setToast(`已重载 ${fileTitle(filePath)}`)
   },
 
   openPdf: (pdfPath) => {
@@ -345,6 +378,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTexLog: (texLog) => set({ texLog }),
   setTexCompiling: (texCompiling) => set({ texCompiling }),
   setTexPathOpen: (texPathOpen) => set({ texPathOpen }),
+  setMainTex: (path, quiet = false) => {
+    set({ mainTexPath: path })
+    get().persistSession()
+    if (!quiet && path) get().setToast(`主文件：${fileTitle(path)}`)
+  },
+  revealInEditor: (path, line) => set({ reveal: { path, line, nonce: Date.now() } }),
+  clearReveal: () => set({ reveal: null }),
+  setPdfSync: (page, y) => set({ pdfSync: { page, y, nonce: Date.now() } }),
 
   restoreSession: async () => {
     if (!window.ink?.pathExists) return
@@ -379,6 +420,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (tabs.length === 0) return
       const active =
         tabs.find((tab) => tab.path === session.currentFile) ?? tabs[0]
+      const mainTexPath =
+        session.mainTexPath && (await window.ink.pathExists(session.mainTexPath))
+          ? session.mainTexPath
+          : null
       set({
         tabs,
         activeId: active.id,
@@ -388,7 +433,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         wordCount: countWords(active.content),
         sourceMode: active.sourceMode,
         editorEpoch: get().editorEpoch + 1,
-        recentFiles: session.recent
+        recentFiles: session.recent,
+        mainTexPath
       })
       get().syncWindowTitle()
     } catch {
@@ -428,12 +474,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().persistSession()
   },
 
-  openFilePath: async (filePath, _silent = false) => {
+  openFilePath: async (filePath, opts) => {
     get().snapshotActive()
     const existing = get().tabs.find((tab) => tab.path === filePath)
     if (existing) {
       get().activateTab(existing.id)
       if (isTexFile(filePath) && !get().sourceMode) set({ sourceMode: true })
+      if (opts?.line) get().revealInEditor(filePath, opts.line)
+      rememberMainIfNeeded(filePath, existing.content)
       return
     }
     const content = await window.ink.readFile(filePath)
@@ -481,6 +529,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectionCount: 0,
       recentFiles: pushRecent(get().recentFiles, filePath)
     })
+    if (opts?.line) get().revealInEditor(filePath, opts.line)
+    rememberMainIfNeeded(filePath, content)
     await get().refreshTree()
     get().syncWindowTitle()
     get().persistSession()
@@ -628,4 +678,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 export function fileNameOf(filePath: string | null): string {
   return fileTitle(filePath)
+}
+
+function rememberMainIfNeeded(filePath: string, content: string): void {
+  if (!isTexSource(filePath) || !/\\documentclass\b/.test(content)) return
+  const store = useAppStore.getState()
+  if (store.mainTexPath) return
+  store.setMainTex(filePath, true)
 }

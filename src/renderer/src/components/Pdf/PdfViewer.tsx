@@ -33,6 +33,7 @@ export function PdfViewer({ path, width, epoch = 0 }: Props) {
   const restoredRef = useRef(false)
   const matchesRef = useRef<PdfMatch[]>([])
   const searchingRef = useRef(false)
+  const pdfSync = useAppStore((s) => s.pdfSync)
   matchesRef.current = matches
 
   useEffect(() => {
@@ -173,6 +174,17 @@ export function PdfViewer({ path, width, epoch = 0 }: Props) {
     }, 60)
   }, [matchIndex, matches])
 
+  useEffect(() => {
+    if (!pdfSync || !pdf) return
+    jumpToPage(pdfSync.page)
+    if (pdfSync.y) {
+      const node = scrollRef.current?.querySelector(`[data-pdf-page="${pdfSync.page}"]`)
+      if (node instanceof HTMLElement && scrollRef.current) {
+        scrollRef.current.scrollTop = Math.max(0, node.offsetTop + pdfSync.y * scale - 48)
+      }
+    }
+  }, [pdfSync, pdf])
+
   const name = path.split(/[/\\]/).pop() || 'PDF'
 
   return (
@@ -199,7 +211,7 @@ export function PdfViewer({ path, width, epoch = 0 }: Props) {
         }}
       />
       <header className="pdf-toolbar">
-        <span className="pdf-title" title={path}>
+        <span className="pdf-title" title={`${path} · Ctrl+点击跳回源码`}>
           {name}
         </span>
         <div className="pdf-tools">
@@ -309,6 +321,7 @@ export function PdfViewer({ path, width, epoch = 0 }: Props) {
                 scrollRoot={scrollRef}
                 matches={matches}
                 matchIndex={matchIndex}
+                pdfPath={path}
               />
             ))
           : null}
@@ -381,7 +394,8 @@ function PdfPage({
   scale,
   scrollRoot,
   matches,
-  matchIndex
+  matchIndex,
+  pdfPath
 }: {
   pdf: PDFDocumentProxy
   pageNumber: number
@@ -389,6 +403,7 @@ function PdfPage({
   scrollRoot: RefObject<HTMLDivElement | null>
   matches: PdfMatch[]
   matchIndex: number
+  pdfPath: string
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -495,6 +510,16 @@ function PdfPage({
       className="pdf-page"
       data-pdf-page={pageNumber}
       ref={hostRef}
+      onClick={(event) => {
+        if (!event.ctrlKey && !event.metaKey) return
+        event.preventDefault()
+        const host = hostRef.current
+        if (!host) return
+        const rect = host.getBoundingClientRect()
+        const x = (event.clientX - rect.left) / scale
+        const y = (event.clientY - rect.top) / scale
+        void syncPdfToSource(pdfPath, pageNumber, x, y)
+      }}
       style={{
         width: box.width || undefined,
         minHeight: box.height,
@@ -524,4 +549,18 @@ function paintHits(
       if (index === matchIndex) span.classList.add('selected', 'pdf-hit-active')
     }
   })
+}
+
+async function syncPdfToSource(pdfPath: string, page: number, x: number, y: number): Promise<void> {
+  const store = useAppStore.getState()
+  if (typeof window.ink?.synctexEdit !== 'function') {
+    store.setToast('请完全退出纸间后再同步源码')
+    return
+  }
+  const result = await window.ink.synctexEdit(pdfPath, page, x, y)
+  if (!result.ok) {
+    store.setToast(result.error)
+    return
+  }
+  await store.openFilePath(result.texPath, { line: result.line })
 }

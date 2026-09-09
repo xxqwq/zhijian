@@ -14,7 +14,7 @@ import {
 } from '@shared/openTarget'
 import type { FileNode, MenuCommand, SearchHit } from '@shared/types'
 import { TEXT_EXTENSIONS, isTexAuxFile } from '@shared/types'
-import { compileTex, getTexPathInfo, importTexTemplate, initLatexSettings, setUserTexBin } from './latex'
+import { compileTex, getTexPathInfo, importTexTemplate, initLatexSettings, setUserTexBin, synctexEdit, synctexView } from './latex'
 
 app.setName('纸间')
 
@@ -137,34 +137,35 @@ function buildMenu(): Menu {
         menuItem('下一标签', 'next-tab', 'Ctrl+PageDown'),
         menuItem('上一标签', 'prev-tab', 'Ctrl+PageUp'),
         menuItem('查找', 'find', 'CmdOrCtrl+F'),
-        menuItem('工作区搜索', 'find-workspace', 'CmdOrCtrl+Shift+F')
-      ]
-    },
-    {
-      label: '段落',
-      submenu: [
-        menuItem('正文', 'format-paragraph'),
-        menuItem('一级标题', 'format-heading-1', 'Ctrl+Alt+1'),
-        menuItem('二级标题', 'format-heading-2', 'Ctrl+Alt+2'),
-        menuItem('三级标题', 'format-heading-3', 'Ctrl+Alt+3'),
-        menuItem('四级标题', 'format-heading-4', 'Ctrl+Alt+4'),
-        menuItem('五级标题', 'format-heading-5', 'Ctrl+Alt+5'),
-        menuItem('六级标题', 'format-heading-6', 'Ctrl+Alt+6'),
+        menuItem('工作区搜索', 'find-workspace', 'CmdOrCtrl+Shift+F'),
         { type: 'separator' },
-        menuItem('无序列表', 'format-bullet'),
-        menuItem('有序列表', 'format-ordered'),
-        menuItem('待办列表', 'format-task'),
-        menuItem('引用', 'format-quote'),
-        menuItem('代码块', 'format-code-block')
-      ]
-    },
-    {
-      label: '格式',
-      submenu: [
-        menuItem('粗体', 'format-bold', 'CmdOrCtrl+B'),
-        menuItem('斜体', 'format-italic', 'CmdOrCtrl+I'),
-        menuItem('删除线', 'format-strike', 'Alt+Shift+5'),
-        menuItem('行内代码', 'format-code')
+        {
+          label: '段落',
+          submenu: [
+            menuItem('正文', 'format-paragraph'),
+            menuItem('一级标题', 'format-heading-1', 'Ctrl+Alt+1'),
+            menuItem('二级标题', 'format-heading-2', 'Ctrl+Alt+2'),
+            menuItem('三级标题', 'format-heading-3', 'Ctrl+Alt+3'),
+            menuItem('四级标题', 'format-heading-4', 'Ctrl+Alt+4'),
+            menuItem('五级标题', 'format-heading-5', 'Ctrl+Alt+5'),
+            menuItem('六级标题', 'format-heading-6', 'Ctrl+Alt+6'),
+            { type: 'separator' },
+            menuItem('无序列表', 'format-bullet'),
+            menuItem('有序列表', 'format-ordered'),
+            menuItem('待办列表', 'format-task'),
+            menuItem('引用', 'format-quote'),
+            menuItem('代码块', 'format-code-block')
+          ]
+        },
+        {
+          label: '格式',
+          submenu: [
+            menuItem('粗体', 'format-bold', 'CmdOrCtrl+B'),
+            menuItem('斜体', 'format-italic', 'CmdOrCtrl+I'),
+            menuItem('删除线', 'format-strike', 'Alt+Shift+5'),
+            menuItem('行内代码', 'format-code')
+          ]
+        }
       ]
     },
     {
@@ -424,6 +425,17 @@ function registerIpc(): void {
 
   ipcMain.handle('tex:compile', (_event, texPath: string) => compileTex(texPath))
 
+  ipcMain.handle(
+    'tex:synctexView',
+    (_event, texPath: string, line: number, column: number, pdfPath: string) =>
+      synctexView(texPath, line, column, pdfPath)
+  )
+
+  ipcMain.handle(
+    'tex:synctexEdit',
+    (_event, pdfPath: string, page: number, x: number, y: number) => synctexEdit(pdfPath, page, x, y)
+  )
+
   ipcMain.handle('tex:import', async (_event, workspace: string, source: string) =>
     importTexTemplate(workspace, source)
   )
@@ -478,6 +490,19 @@ function registerIpc(): void {
     if (result.response === 0) return 'save'
     if (result.response === 1) return 'discard'
     return 'cancel'
+  })
+
+  ipcMain.handle('dialog:confirmReload', async (_event, name: string) => {
+    if (!mainWindow) return false
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['重载', '保留当前'],
+      defaultId: 0,
+      cancelId: 1,
+      message: `「${name}」已在其他程序中被修改，要重新加载吗？`,
+      detail: '重载会丢掉纸间里尚未保存的修改。'
+    })
+    return result.response === 0
   })
 
   ipcMain.handle('fs:readTree', (_event, dir: string) => readTree(dir))
@@ -641,10 +666,15 @@ function registerIpc(): void {
         /\.(aux|bbl|blg|fdb_latexmk|fls|log|lof|lot|nav|out|snm|synctex\.gz|toc|vrb)$/i
       ]
     })
-    const notify = (): void => {
-      mainWindow?.webContents.send('watch:change')
+    const notify = (file?: string): void => {
+      mainWindow?.webContents.send('watch:change', file)
     }
-    watcher.on('add', notify).on('unlink', notify).on('addDir', notify).on('unlinkDir', notify)
+    watcher
+      .on('add', notify)
+      .on('change', notify)
+      .on('unlink', notify)
+      .on('addDir', notify)
+      .on('unlinkDir', notify)
   })
 
   ipcMain.handle(

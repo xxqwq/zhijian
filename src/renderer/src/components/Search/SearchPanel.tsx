@@ -1,18 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { SearchHit } from '@shared/types'
+import { findInEditor, jumpToSourceLine, replaceInEditor } from '@renderer/lib/editorNav'
 import { useAppStore } from '@renderer/store/appStore'
 
-interface Props {
-  onFind: (query: string, backward?: boolean) => void
-}
-
-export function SearchPanel({ onFind }: Props) {
+export function SearchPanel() {
   const mode = useAppStore((s) => s.searchMode)
   const workspacePath = useAppStore((s) => s.workspacePath)
-  const content = useAppStore((s) => s.content)
   const setSearchMode = useAppStore((s) => s.setSearchMode)
-  const setContent = useAppStore((s) => s.setContent)
-  const bumpEditor = useAppStore((s) => s.bumpEditor)
   const openFilePath = useAppStore((s) => s.openFilePath)
   const [query, setQuery] = useState('')
   const [replace, setReplace] = useState('')
@@ -33,16 +27,19 @@ export function SearchPanel({ onFind }: Props) {
     setStatus(next.length ? `找到 ${next.length} 处` : '没有匹配')
   }
 
+  const runFind = (backward = false): void => {
+    if (!query) return
+    setStatus(findInEditor(query, backward) ? '' : '没有匹配')
+  }
+
   const replaceInFile = (all: boolean): void => {
     if (!query) return
-    const next = all ? content.split(query).join(replace) : content.replace(query, replace)
-    setContent(next)
-    bumpEditor()
-    setStatus(all ? '已全部替换' : '已替换一处')
+    const count = replaceInEditor(query, replace, all)
+    setStatus(count ? (all ? `已替换 ${count} 处` : '已替换一处') : '没有匹配')
   }
 
   return (
-    <div className="overlay" onClick={() => setSearchMode('none')}>
+    <div className={`overlay ${mode === 'file' ? 'overlay-find' : ''}`} onClick={() => setSearchMode('none')}>
       <div className="search-card" onClick={(event) => event.stopPropagation()}>
         <h3>{mode === 'file' ? '查找当前文稿' : '搜索工作区'}</h3>
         <div className="search-row">
@@ -53,7 +50,7 @@ export function SearchPanel({ onFind }: Props) {
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
-                if (mode === 'file') onFind(query)
+                if (mode === 'file') runFind()
                 else void runWorkspaceSearch()
               }
               if (event.key === 'Escape') setSearchMode('none')
@@ -61,10 +58,10 @@ export function SearchPanel({ onFind }: Props) {
           />
           {mode === 'file' ? (
             <>
-              <button className="icon-btn active" type="button" onClick={() => onFind(query, true)}>
+              <button className="icon-btn active" type="button" onClick={() => runFind(true)}>
                 上一个
               </button>
-              <button className="icon-btn active" type="button" onClick={() => onFind(query)}>
+              <button className="icon-btn active" type="button" onClick={() => runFind()}>
                 下一个
               </button>
             </>
@@ -99,7 +96,13 @@ export function SearchPanel({ onFind }: Props) {
                 type="button"
                 onClick={() => {
                   setSearchMode('none')
-                  void openFilePath(hit.path)
+                  void (async () => {
+                    await openFilePath(hit.path, { line: hit.line })
+                    window.setTimeout(() => {
+                      jumpToSourceLine(hit.line, hit.text)
+                      useAppStore.getState().clearReveal()
+                    }, 40)
+                  })()
                 }}
               >
                 <b>{hit.path.split(/[/\\]/).pop()}</b>:{hit.line} {hit.text}

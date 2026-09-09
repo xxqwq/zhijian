@@ -25,6 +25,7 @@ import { FrontmatterPanel } from '@renderer/components/Editor/FrontmatterPanel'
 import { createCalloutPlugin } from '@renderer/lib/calloutPlugin'
 import { createLinkOpenPlugin } from '@renderer/lib/openLocalPlugin'
 import { registerEditorCommands, registerSelectionMarkdown, registerDocumentMarkdown, type EditorCommand } from '@renderer/lib/editorCommands'
+import { findInProseMirror, registerWysiwygFind, registerWysiwygReplace, replaceInProseMirror } from '@renderer/lib/editorNav'
 import { joinFrontmatter, splitFrontmatter } from '@renderer/lib/frontmatter'
 import { renderMermaidSvg } from '@renderer/lib/mermaid'
 import type { ThemeName } from '@shared/types'
@@ -178,6 +179,8 @@ export function MilkdownEditor({ fileKey, tabId, markdown, theme, currentFile, o
     let unregister: (() => void) | undefined
     let unregisterSelection: (() => void) | undefined
     let unregisterDocument: (() => void) | undefined
+    let unregisterFind: (() => void) | undefined
+    let unregisterReplace: (() => void) | undefined
 
     void crepe.create().then(() => {
       if (disposed) {
@@ -191,6 +194,22 @@ export function MilkdownEditor({ fileKey, tabId, markdown, theme, currentFile, o
         if (crepe.editor.status !== EditorStatus.Created) return null
         return joinFrontmatter(frontmatterRef.current, crepe.getMarkdown())
       })
+      unregisterFind = registerWysiwygFind((query, backward) => {
+        if (crepe.editor.status !== EditorStatus.Created) return false
+        let ok = false
+        crepe.editor.action((ctx) => {
+          ok = findInProseMirror(ctx.get(editorViewCtx), query, backward)
+        })
+        return ok
+      })
+      unregisterReplace = registerWysiwygReplace((query, replacement) => {
+        if (crepe.editor.status !== EditorStatus.Created) return 0
+        let count = 0
+        crepe.editor.action((ctx) => {
+          count = replaceInProseMirror(ctx.get(editorViewCtx), query, replacement)
+        })
+        return count
+      })
       applyExternal(markdownRef.current)
     })
 
@@ -199,6 +218,8 @@ export function MilkdownEditor({ fileKey, tabId, markdown, theme, currentFile, o
       unregister?.()
       unregisterSelection?.()
       unregisterDocument?.()
+      unregisterFind?.()
+      unregisterReplace?.()
       crepeRef.current = null
       void crepe.destroy()
       root.innerHTML = ''

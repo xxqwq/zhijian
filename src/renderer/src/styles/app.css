@@ -574,6 +574,14 @@ button {
   word-break: break-word;
 }
 
+.tree-main {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--accent);
+}
+
 .outline-item {
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -747,6 +755,23 @@ button {
   border-top: 1px solid var(--line);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.tex-log-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tex-log-link:hover {
+  color: var(--ink);
 }
 
 .split-scroll-probe {
@@ -1379,9 +1404,16 @@ button {
   z-index: 20;
 }
 
-.overlay-quick {
-  align-items: flex-start;
-  padding-top: 14vh;
+.overlay-find {
+  background: transparent;
+  pointer-events: none;
+  justify-content: flex-end;
+  padding: 52px 16px 0 0;
+}
+
+.overlay-find .search-card {
+  pointer-events: auto;
+  width: min(420px, calc(100% - 32px));
 }
 
 .dialog,
@@ -1509,7 +1541,10 @@ button {
 .context-menu {
   position: fixed;
   z-index: 30;
-  min-width: 150px;
+  width: max-content;
+  min-width: 0;
+  justify-self: start;
+  align-self: start;
   background: var(--bg-paper);
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
@@ -1518,14 +1553,16 @@ button {
 }
 
 .context-menu button {
+  display: block;
   width: 100%;
   text-align: left;
   border: 0;
   background: transparent;
   color: var(--ink);
-  padding: 7px 10px;
+  padding: 7px 12px;
   border-radius: 7px;
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .context-menu button:hover {

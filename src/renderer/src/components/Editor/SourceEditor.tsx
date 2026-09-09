@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { registerEditorCommands, registerSelectionMarkdown, type EditorCommand } from '@renderer/lib/editorCommands'
+import { caretLineCol, jumpTextareaToLine } from '@renderer/lib/editorNav'
 import { findTexSlots, renderTexBackdrop } from '@renderer/lib/texSlots'
 import { isTexSource } from '@shared/types'
 import { useAppStore } from '@renderer/store/appStore'
@@ -8,6 +9,7 @@ export function SourceEditor() {
   const content = useAppStore((s) => s.content)
   const currentFile = useAppStore((s) => s.currentFile)
   const setContent = useAppStore((s) => s.setContent)
+  const reveal = useAppStore((s) => s.reveal)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const backdropRef = useRef<HTMLPreElement>(null)
   const texDoc = isTexSource(currentFile ?? '')
@@ -56,14 +58,40 @@ export function SourceEditor() {
     return () => ro.disconnect()
   }, [texDoc])
 
+  useEffect(() => {
+    if (!reveal || !currentFile) return
+    if (reveal.path.replace(/\\/g, '/').toLowerCase() !== currentFile.replace(/\\/g, '/').toLowerCase()) {
+      return
+    }
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const { path, line } = reveal
+    window.requestAnimationFrame(() => {
+      if (textareaRef.current) jumpTextareaToLine(textarea, line)
+      const current = useAppStore.getState().reveal
+      if (current?.path === path && current.line === line) {
+        useAppStore.getState().clearReveal()
+      }
+    })
+  }, [reveal, currentFile])
+
   const editor = (
     <textarea
       ref={textareaRef}
       className="source-editor"
       spellCheck={false}
+      title={texDoc ? 'Ctrl+点击跳到 PDF 对应页' : undefined}
       value={content}
       onChange={(event) => setContent(event.target.value)}
       onScroll={syncBackdrop}
+      onClick={(event) => {
+        if (!texDoc || (!event.ctrlKey && !event.metaKey)) return
+        const textarea = textareaRef.current
+        if (!textarea) return
+        event.preventDefault()
+        const { line, column } = caretLineCol(textarea)
+        void syncSourceToPdf(line, column)
+      }}
       aria-label="源码"
     />
   )
@@ -154,4 +182,24 @@ function applySourceCommand(
     default:
       return false
   }
+}
+
+async function syncSourceToPdf(line: number, column: number): Promise<void> {
+  const store = useAppStore.getState()
+  const texPath = store.currentFile
+  const pdfPath = store.pdfPath
+  if (!texPath || !pdfPath) {
+    store.setToast('请先编译出 PDF')
+    return
+  }
+  if (typeof window.ink?.synctexView !== 'function') {
+    store.setToast('请完全退出纸间后再同步 PDF')
+    return
+  }
+  const result = await window.ink.synctexView(texPath, line, column, pdfPath)
+  if (!result.ok) {
+    store.setToast(result.error)
+    return
+  }
+  store.setPdfSync(result.page, result.y)
 }

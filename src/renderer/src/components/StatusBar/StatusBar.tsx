@@ -10,6 +10,7 @@ export function StatusBar() {
   const typewriter = useAppStore((s) => s.typewriter)
   const sourceMode = useAppStore((s) => s.sourceMode)
   const texCompiling = useAppStore((s) => s.texCompiling)
+  const mainTexPath = useAppStore((s) => s.mainTexPath)
   const theme = useAppStore((s) => s.theme)
   const cycleTheme = useAppStore((s) => s.cycleTheme)
   const toggleTypewriter = useAppStore((s) => s.toggleTypewriter)
@@ -25,6 +26,9 @@ export function StatusBar() {
         {wordCount} 字 · {readingLabel(wordCount)}
         {sourceMode && !texDoc ? ' · 源码对照' : ''}
         {texDoc ? ' · LaTeX' : ''}
+        {mainTexPath && currentFile && mainTexPath !== currentFile
+          ? ` · 主文件 ${fileNameOf(mainTexPath)}`
+          : ''}
         {texCompiling ? ' · 正在编译' : ''}
         {' · '}
         <button

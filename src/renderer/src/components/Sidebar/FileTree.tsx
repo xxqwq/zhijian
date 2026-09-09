@@ -1,6 +1,6 @@
 import { useMemo, useState, type MouseEvent } from 'react'
 import type { FileNode, WorkspaceKind } from '@shared/types'
-import { isPdfFile } from '@shared/types'
+import { isPdfFile, isTexSource } from '@shared/types'
 import { pickPdfFile } from '@renderer/lib/openLocal'
 import { countFiles, filterTreeByKind } from '@renderer/lib/files'
 import { importConferenceTemplate } from '@renderer/lib/tex'
@@ -206,6 +206,7 @@ function TreeNode({
   onMenu: (event: MouseEvent, node: FileNode) => void
 }) {
   const [open, setOpen] = useState(true)
+  const mainTexPath = useAppStore((s) => s.mainTexPath)
   const isDir = node.type === 'directory'
   const pad = { paddingLeft: 10 + depth * 18 }
 
@@ -250,6 +251,7 @@ function TreeNode({
     >
       <span className="caret">·</span>
       <span className="tree-label">{node.name}</span>
+      {mainTexPath === node.path ? <em className="tree-main">主</em> : null}
     </button>
   )
 }
@@ -262,6 +264,8 @@ export function FileContextMenu() {
   const createFolder = useAppStore((s) => s.createFolder)
   const renameNode = useAppStore((s) => s.renameNode)
   const deleteNode = useAppStore((s) => s.deleteNode)
+  const setMainTex = useAppStore((s) => s.setMainTex)
+  const mainTexPath = useAppStore((s) => s.mainTexPath)
 
   const dir = useMemo(() => {
     if (!menu) return ''
@@ -313,6 +317,17 @@ export function FileContextMenu() {
         >
           导入 LaTeX 模板
         </button>
+        {menu.node.type === 'file' && isTexSource(menu.node.path) ? (
+          <button
+            type="button"
+            onClick={() => {
+              setContextMenu(null)
+              setMainTex(menu.node.path)
+            }}
+          >
+            {mainTexPath === menu.node.path ? '已是主文件' : '设为主文件'}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => {

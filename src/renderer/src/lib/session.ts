@@ -15,6 +15,7 @@ export interface SessionState {
   openTabs: SessionTab[]
   recent: RecentFile[]
   pdfPath: string | null
+  mainTexPath: string | null
 }
 
 const KEY = 'zhijian.session'
@@ -23,7 +24,9 @@ const MAX_RECENT = 24
 export function readSession(): SessionState {
   try {
     const raw = localStorage.getItem(KEY)
-    if (!raw) return { workspacePath: null, currentFile: null, openTabs: [], recent: [], pdfPath: null }
+    if (!raw) {
+      return { workspacePath: null, currentFile: null, openTabs: [], recent: [], pdfPath: null, mainTexPath: null }
+    }
     const parsed = JSON.parse(raw) as Partial<SessionState>
     const openTabs = Array.isArray(parsed.openTabs)
       ? parsed.openTabs.filter((item): item is SessionTab => Boolean(item?.path))
@@ -35,10 +38,11 @@ export function readSession(): SessionState {
       currentFile: parsed.currentFile ?? null,
       openTabs,
       recent: Array.isArray(parsed.recent) ? parsed.recent : [],
-      pdfPath: parsed.pdfPath ?? null
+      pdfPath: parsed.pdfPath ?? null,
+      mainTexPath: parsed.mainTexPath ?? null
     }
   } catch {
-    return { workspacePath: null, currentFile: null, openTabs: [], recent: [], pdfPath: null }
+    return { workspacePath: null, currentFile: null, openTabs: [], recent: [], pdfPath: null, mainTexPath: null }
   }
 }
 

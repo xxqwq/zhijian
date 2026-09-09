@@ -35,8 +35,10 @@ const api = {
   exportPdf: (dest: string, html: string): Promise<void> =>
     ipcRenderer.invoke('export:pdf', dest, html),
   watch: (dir: string): Promise<void> => ipcRenderer.invoke('watch:start', dir),
-  onWatchChange: (handler: () => void): (() => void) => {
-    const listener = (): void => handler()
+  onWatchChange: (handler: (filePath?: string) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, filePath?: string): void => {
+      handler(filePath)
+    }
     ipcRenderer.on('watch:change', listener)
     return () => ipcRenderer.removeListener('watch:change', listener)
   },
@@ -55,6 +57,7 @@ const api = {
     ipcRenderer.invoke('window:setDirty', dirty, title),
   confirmClose: (message?: string): Promise<'save' | 'discard' | 'cancel'> =>
     ipcRenderer.invoke('dialog:confirmClose', message),
+  confirmReload: (name: string): Promise<boolean> => ipcRenderer.invoke('dialog:confirmReload', name),
   pathExists: (target: string): Promise<boolean> => ipcRenderer.invoke('fs:exists', target),
   resolveTarget: (
     target: string,
@@ -80,6 +83,24 @@ const api = {
     | { ok: true; pdfPath: string; log: string }
     | { ok: false; error: string; log: string; pdfPath?: string }
   > => ipcRenderer.invoke('tex:compile', texPath),
+  synctexView: (
+    texPath: string,
+    line: number,
+    column: number,
+    pdfPath: string
+  ): Promise<
+    | { ok: true; page: number; x: number; y: number }
+    | { ok: false; error: string }
+  > => ipcRenderer.invoke('tex:synctexView', texPath, line, column, pdfPath),
+  synctexEdit: (
+    pdfPath: string,
+    page: number,
+    x: number,
+    y: number
+  ): Promise<
+    | { ok: true; texPath: string; line: number; column: number }
+    | { ok: false; error: string }
+  > => ipcRenderer.invoke('tex:synctexEdit', pdfPath, page, x, y),
   pickTexTemplate: (): Promise<string | null> => ipcRenderer.invoke('dialog:texTemplate'),
   importTexTemplate: (
     workspace: string,

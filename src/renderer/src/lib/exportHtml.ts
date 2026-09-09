@@ -165,13 +165,13 @@ export function markdownToPlain(markdown: string): string {
   return (host.innerText || host.textContent || '').replace(/\n{3,}/g, '\n\n').trim()
 }
 
-export function buildCopyHtml(markdown: string, theme: ThemeName, filePath: string | null): string {
+export async function buildCopyHtml(markdown: string, theme: ThemeName, filePath: string | null): Promise<string> {
   const colors = themeMeta(theme).exportColors
   let body = renderMarkdownBody(markdown).replace(
     /<div class="mermaid">([\s\S]*?)<\/div>/g,
     '<pre class="hl">$1</pre>'
   )
-  body = rewriteLocalImages(body, filePath)
+  body = await embedLocalImages(body, filePath)
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -198,16 +198,67 @@ export function buildCopyHtml(markdown: string, theme: ThemeName, filePath: stri
 </html>`
 }
 
-function rewriteLocalImages(html: string, filePath: string | null): string {
+async function embedLocalImages(html: string, filePath: string | null): Promise<string> {
   if (!filePath) return html
   const dir = filePath.replace(/[/\\][^/\\]+$/, '')
   const sep = filePath.includes('\\') ? '\\' : '/'
-  return html.replace(/<img\b([^>]*?)\bsrc="([^"]+)"/g, (match, attrs: string, src: string) => {
-    if (/^(https?:|data:|file:|ink:)/i.test(src)) return match
-    const abs = resolveBeside(dir, src, sep)
-    const href = abs.startsWith('/') ? `file://${abs}` : `file:///${abs.replace(/\\/g, '/')}`
-    return `<img${attrs}src="${href}"`
-  })
+  const matches = [...html.matchAll(/<img\b([^>]*?)\bsrc="([^"]+)"/g)]
+  let next = html
+  for (const match of matches) {
+    const src = match[2]
+    if (/^(https?:|data:)/i.test(src)) continue
+    const abs = src.startsWith('ink://')
+      ? decodeInkPath(src)
+      : /^(file:)/i.test(src)
+        ? src.replace(/^file:\/+/i, '').replace(/\//g, sep)
+        : resolveBeside(dir, src, sep)
+    if (!abs) continue
+    const dataUrl = await fileToDataUrl(abs)
+    if (!dataUrl) continue
+    next = next.replace(match[0], `<img${match[1]}src="${dataUrl}"`)
+  }
+  return next
+}
+
+function decodeInkPath(src: string): string | null {
+  try {
+    return new URL(src).searchParams.get('p')
+  } catch {
+    return null
+  }
+}
+
+async function fileToDataUrl(filePath: string): Promise<string | null> {
+  if (typeof window.ink?.pathExists !== 'function' || typeof window.ink.readBinary !== 'function') {
+    return null
+  }
+  if (!(await window.ink.pathExists(filePath))) return null
+  try {
+    const bytes = await window.ink.readBinary(filePath)
+    return `data:${mimeFromPath(filePath)};base64,${bytesToBase64(bytes)}`
+  } catch {
+    return null
+  }
+}
+
+function mimeFromPath(filePath: string): string {
+  const ext = filePath.slice(filePath.lastIndexOf('.')).toLowerCase()
+  if (ext === '.png') return 'image/png'
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
+  if (ext === '.gif') return 'image/gif'
+  if (ext === '.webp') return 'image/webp'
+  if (ext === '.svg') return 'image/svg+xml'
+  if (ext === '.bmp') return 'image/bmp'
+  if (ext === '.ico') return 'image/x-icon'
+  return 'application/octet-stream'
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192))
+  }
+  return btoa(binary)
 }
 
 function resolveBeside(dir: string, rel: string, sep: string): string {
@@ -220,13 +271,14 @@ function resolveBeside(dir: string, rel: string, sep: string): string {
   return parts.join(sep)
 }
 
-export function buildExportHtml(
+export async function buildExportHtml(
   markdown: string,
   theme: ThemeName,
   title: string,
-  kind: ExportKind = 'html'
-): string {
-  const body = renderMarkdownBody(markdown)
+  kind: ExportKind = 'html',
+  filePath: string | null = null
+): Promise<string> {
+  const body = await embedLocalImages(renderMarkdownBody(markdown), filePath)
   const mermaidTheme = kind === 'pdf' ? 'neutral' : themeMeta(theme).scheme === 'dark' ? 'dark' : 'neutral'
   return `<!DOCTYPE html>
 <html lang="zh-CN">

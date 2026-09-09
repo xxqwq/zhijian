@@ -4,6 +4,7 @@ import { cp, mkdir, readFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import path from 'path'
 import { promisify } from 'util'
+import { gunzipSync } from 'zlib'
 import { isTexAuxFile, isTexSource } from '@shared/types'
 
 const execFileAsync = promisify(execFile)
@@ -21,6 +22,14 @@ export type TexPathInfo = {
   latexmk: string | null
   detected: string | null
 }
+
+export type SynctexViewResult =
+  | { ok: true; page: number; x: number; y: number }
+  | { ok: false; error: string }
+
+export type SynctexEditResult =
+  | { ok: true; texPath: string; line: number; column: number }
+  | { ok: false; error: string }
 
 let settingsFile = ''
 
@@ -79,7 +88,7 @@ export async function compileTex(texPath: string): Promise<TexCompileResult> {
   }
   const source = await readFile(texPath, 'utf-8')
   const engine = texEngine(source)
-  const flags = ['-view=none', '-interaction=nonstopmode', '-file-line-error', '-shell-escape']
+  const flags = ['-view=none', '-interaction=nonstopmode', '-file-line-error', '-synctex=1', '-shell-escape']
   const args =
     engine === 'xelatex'
       ? [...flags, '-xelatex', path.basename(texPath)]
@@ -340,6 +349,172 @@ function runCommand(
       resolve({ code: code ?? 1, log })
     })
   })
+}
+
+export async function synctexView(
+  texPath: string,
+  line: number,
+  column: number,
+  pdfPath: string
+): Promise<SynctexViewResult> {
+  const fromFile = viewFromSynctexFile(pdfPath, texPath, line)
+  if (fromFile) return { ok: true, ...fromFile }
+  const fromCli = await viewFromSynctexCli(texPath, line, column, pdfPath)
+  if (fromCli) return { ok: true, ...fromCli }
+  return { ok: false, error: '没有 SyncTeX 记录。请先成功编译一次。' }
+}
+
+export async function synctexEdit(
+  pdfPath: string,
+  page: number,
+  x: number,
+  y: number
+): Promise<SynctexEditResult> {
+  const synctex = await findSynctex()
+  if (!synctex) {
+    return { ok: false, error: '找不到 synctex。请确认 TeX 的 bin 目录可用。' }
+  }
+  if (!existsSync(pdfPath)) {
+    return { ok: false, error: '找不到这份 PDF' }
+  }
+  const cwd = path.dirname(pdfPath)
+  const result = await runCommand(
+    synctex,
+    ['edit', '-o', `${page}:${x.toFixed(2)}:${y.toFixed(2)}:${path.basename(pdfPath)}`],
+    cwd,
+    15_000,
+    path.dirname(synctex)
+  )
+  const parsed = parseSynctexEditOut(result.log)
+  if (!parsed) {
+    return { ok: false, error: '这一页没有对应的源码位置' }
+  }
+  return {
+    ok: true,
+    texPath: resolveSynctexInput(parsed.input, cwd),
+    line: parsed.line,
+    column: parsed.column
+  }
+}
+
+function viewFromSynctexFile(
+  pdfPath: string,
+  texPath: string,
+  line: number
+): { page: number; x: number; y: number } | null {
+  const text = readSynctexText(pdfPath)
+  if (!text) return null
+  const page = pageForLine(text, texPath, line)
+  if (!page) return null
+  return { page, x: 0, y: 0 }
+}
+
+async function viewFromSynctexCli(
+  texPath: string,
+  line: number,
+  column: number,
+  pdfPath: string
+): Promise<{ page: number; x: number; y: number } | null> {
+  const synctex = await findSynctex()
+  if (!synctex || !existsSync(pdfPath)) return null
+  const cwd = path.dirname(pdfPath)
+  const result = await runCommand(
+    synctex,
+    ['view', '-i', `${line}:${Math.max(0, column)}:${path.basename(texPath)}`, '-o', path.basename(pdfPath)],
+    cwd,
+    15_000,
+    path.dirname(synctex)
+  )
+  return parseSynctexViewOut(result.log)
+}
+
+async function findSynctex(): Promise<string | null> {
+  const latexmk = await findLatexmk()
+  if (!latexmk) return null
+  const exe = process.platform === 'win32' ? 'synctex.exe' : 'synctex'
+  const beside = path.join(path.dirname(latexmk), exe)
+  return existsSync(beside) ? beside : null
+}
+
+function synctexPathForPdf(pdfPath: string): string | null {
+  const gz = pdfPath.replace(/\.pdf$/i, '.synctex.gz')
+  if (existsSync(gz)) return gz
+  const raw = pdfPath.replace(/\.pdf$/i, '.synctex')
+  return existsSync(raw) ? raw : null
+}
+
+function readSynctexText(pdfPath: string): string | null {
+  const file = synctexPathForPdf(pdfPath)
+  if (!file) return null
+  try {
+    const buf = readFileSync(file)
+    if (file.toLowerCase().endsWith('.gz')) return gunzipSync(buf).toString('utf8')
+    return buf.toString('utf8')
+  } catch {
+    return null
+  }
+}
+
+function pageForLine(synctex: string, texPath: string, line: number): number | null {
+  const tags = new Set<string>()
+  const inputRe = /^Input:(\d+):(.+)$/gm
+  let input: RegExpExecArray | null
+  while ((input = inputRe.exec(synctex))) {
+    if (synctexInputMatches(input[2].trim(), texPath)) tags.add(input[1])
+  }
+  if (tags.size === 0) return null
+  let page = 0
+  let bestPage = 0
+  let bestDist = Infinity
+  for (const row of synctex.split(/\r?\n/)) {
+    if (row.startsWith('{')) {
+      const next = Number(row.slice(1))
+      if (next > 0) page = next
+      continue
+    }
+    const rec = /^[(\[xhgk$v](\d+),(\d+)/.exec(row)
+    if (!rec || !tags.has(rec[1])) continue
+    const dist = Math.abs(Number(rec[2]) - line)
+    if (dist < bestDist) {
+      bestDist = dist
+      bestPage = page
+    }
+  }
+  return bestPage > 0 ? bestPage : null
+}
+
+function synctexInputMatches(recorded: string, texPath: string): boolean {
+  const a = recorded.replace(/\\/g, '/').replace(/^"|"$/g, '').toLowerCase()
+  const b = texPath.replace(/\\/g, '/').toLowerCase()
+  const base = path.basename(texPath).toLowerCase()
+  return a === b || a.endsWith(`/${base}`) || a === base
+}
+
+function parseSynctexViewOut(out: string): { page: number; x: number; y: number } | null {
+  const page = /(?:^|\n)Page:\s*(\d+)/i.exec(out)
+  if (!page) return null
+  return {
+    page: Number(page[1]),
+    x: Number(/(?:^|\n)x:\s*([\d.]+)/i.exec(out)?.[1] ?? 0),
+    y: Number(/(?:^|\n)y:\s*([\d.]+)/i.exec(out)?.[1] ?? 0)
+  }
+}
+
+function parseSynctexEditOut(out: string): { input: string; line: number; column: number } | null {
+  const input = /(?:^|\n)Input:(.+)/i.exec(out)
+  const line = /(?:^|\n)Line:\s*(\d+)/i.exec(out)
+  if (!input || !line) return null
+  return {
+    input: input[1].trim(),
+    line: Number(line[1]),
+    column: Number(/(?:^|\n)Column:\s*(\d+)/i.exec(out)?.[1] ?? 0)
+  }
+}
+
+function resolveSynctexInput(input: string, cwd: string): string {
+  const cleaned = input.replace(/^"|"$/g, '').trim()
+  if (path.isAbsolute(cleaned)) return path.normalize(cleaned)
+  return path.normalize(path.join(cwd, cleaned))
 }
 
 function firstTexError(log: string): string | null {

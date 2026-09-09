@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { MenuCommand } from '@shared/types'
 import { MilkdownEditor } from '@renderer/components/Editor/MilkdownEditor'
 import { SourceEditor } from '@renderer/components/Editor/SourceEditor'
+import { TexLog } from '@renderer/components/Editor/TexLog'
 import { FileContextMenu, FileTree } from '@renderer/components/Sidebar/FileTree'
 import { Outline } from '@renderer/components/Outline/Outline'
 import { SearchPanel } from '@renderer/components/Search/SearchPanel'
@@ -12,7 +13,7 @@ import { TexPathDialog } from '@renderer/components/TexPathDialog'
 import { TabBar } from '@renderer/components/TabBar'
 import { ThemePicker } from '@renderer/components/ThemePicker'
 import { buildExportHtml } from '@renderer/lib/exportHtml'
-import { findInEditor, jumpToHeading } from '@renderer/lib/editorNav'
+import { jumpToHeading } from '@renderer/lib/editorNav'
 import {
   runClipboard,
   runEditorCommand,
@@ -32,7 +33,10 @@ import {
 import { pickPdfFile, syncNotePdf, toggleNotePdf } from '@renderer/lib/openLocal'
 import { isPdfPaneActive, requestPdfFind, setPdfPaneActive } from '@renderer/lib/pdfUi'
 import { fileNameOf, useAppStore } from '@renderer/store/appStore'
+import { bindSplitScroll } from '@renderer/lib/scrollSync'
+import { onWorkspaceWatch } from '@renderer/lib/diskReload'
 import { writeStageScroll } from '@renderer/lib/tabs'
+import { dirOf } from '@renderer/lib/texLog'
 
 export default function App() {
   const currentFile = useAppStore((s) => s.currentFile)
@@ -51,6 +55,7 @@ export default function App() {
   const pdfWidth = useAppStore((s) => s.pdfWidth)
   const texLog = useAppStore((s) => s.texLog)
   const texCompiling = useAppStore((s) => s.texCompiling)
+  const mainTexPath = useAppStore((s) => s.mainTexPath)
   const setContent = useAppStore((s) => s.setContent)
   const setToast = useAppStore((s) => s.setToast)
   const saveTimer = useRef<number | null>(null)
@@ -65,8 +70,8 @@ export default function App() {
     const offMenu = window.ink.onMenu((command) => {
       void handleMenu(command)
     })
-    const offWatch = window.ink.onWatchChange(() => {
-      void useAppStore.getState().refreshTree()
+    const offWatch = window.ink.onWatchChange((filePath) => {
+      onWorkspaceWatch(filePath)
     })
     return () => {
       offMenu()
@@ -219,6 +224,21 @@ export default function App() {
     return () => window.removeEventListener('wheel', onWheel, { capture: true })
   }, [])
 
+  useEffect(() => {
+    if (!sourceMode || isTexFile(currentFile ?? '')) return
+    let unbind: (() => void) | undefined
+    const timer = window.setTimeout(() => {
+      const source = document.querySelector('.source-editor')
+      const preview = document.querySelector('.preview-pane')
+      if (!(source instanceof HTMLTextAreaElement) || !(preview instanceof HTMLElement)) return
+      unbind = bindSplitScroll(source, preview, () => useAppStore.getState().content)
+    }, 50)
+    return () => {
+      window.clearTimeout(timer)
+      unbind?.()
+    }
+  }, [sourceMode, currentFile, activeId, editorEpoch])
+
   const texDoc = isTexFile(currentFile ?? '')
   const texMain = isTexSource(currentFile ?? '')
 
@@ -254,7 +274,11 @@ export default function App() {
             <button
               className={`icon-btn ${texCompiling ? 'active' : ''}`}
               type="button"
-              title="用 TeX Live 编译 Ctrl+Enter"
+              title={
+                mainTexPath && currentFile && mainTexPath !== currentFile
+                  ? `编译 ${fileNameOf(mainTexPath)} Ctrl+Enter`
+                  : '用 TeX Live 编译 Ctrl+Enter'
+              }
               disabled={texCompiling}
               onClick={() => void compileCurrentTex()}
             >
@@ -300,7 +324,9 @@ export default function App() {
             {texDoc ? (
               <div className="source-pane tex-source">
                 <SourceEditor />
-                {texLog ? <pre className="tex-log">{texLog}</pre> : null}
+                {texLog ? (
+                  <TexLog log={texLog} root={dirOf(mainTexPath || currentFile || '')} />
+                ) : null}
               </div>
             ) : (
               <>
@@ -332,7 +358,7 @@ export default function App() {
       </div>
 
       <StatusBar />
-      <SearchPanel onFind={findInEditor} />
+      <SearchPanel />
       <QuickOpen />
       <PromptDialog />
       <TexPathDialog />
@@ -539,7 +565,7 @@ async function exportCurrent(kind: 'html' | 'pdf'): Promise<void> {
       : { name: 'PDF', extensions: ['pdf'] }
   ])
   if (!dest) return
-  const html = buildExportHtml(markdown, theme, base, kind)
+  const html = await buildExportHtml(markdown, theme, base, kind, currentFile)
   if (kind === 'html') await window.ink.exportHtml(dest, html)
   else await window.ink.exportPdf(dest, html)
   setToast(kind === 'html' ? '已导出 HTML' : '已导出 PDF')

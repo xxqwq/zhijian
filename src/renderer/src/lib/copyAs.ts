@@ -29,7 +29,7 @@ export async function copyAs(kind: CopyAsKind): Promise<void> {
 
   await writeClipboard({
     text: plain,
-    html: buildCopyHtml(markdown, theme, currentFile)
+    html: await buildCopyHtml(markdown, theme, currentFile)
   })
   setToast(selected ? '已复制选区 HTML' : '已复制全文 HTML')
 }
